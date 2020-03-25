@@ -1,0 +1,28 @@
+{
+  "quoteId" : "a7l3I0000004Jdw",
+  "products": {
+    "X Series - X4": {
+      "quantity":"1",
+      "netprice":"45",
+      "baseprice":"45",
+      "adjustmentType":"% Discount",
+      "adjustmentAmount":"3"
+    },
+    "X Series - X1": {
+      "quantity":"1",
+      "netprice":"45",
+      "baseprice":"45",
+      "adjustmentType":"% Discount",
+      "adjustmentAmount":"2"
+    }
+  },
+  "location": {
+    "name" : "2125 Onel Dr,San Jose,CA,USA",
+    "locationId": "a4Q220000000CdG",
+    "street": "2125",
+    "city": "Onel Dr",
+    "state": "Scotland",
+    "zip": "EH10 4BF",
+    "country": "UK"
+  }
+}

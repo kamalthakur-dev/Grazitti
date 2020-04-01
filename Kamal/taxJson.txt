@@ -1,0 +1,46 @@
+{
+  "TaxJSON": {
+    "requestId": "aJx0r00000009pwCAA",
+    "customerId": "test",
+    "UDF2": "QB0784593010420",
+    "taxNeeded": true,
+    "region": "USA",
+    "AccID": "0010r00000KQiSzAAL",
+    "OppId": "0060r000003GQbrAAG",
+    "Quote": "undefined",
+    "currency": "USD",
+    "Locations": [
+      {
+        "LocationID": "a4Q0r000000AezsEAC",
+        "address": {
+          "city": "SAN JOSE",
+          "state": "CA",
+          "zip": "95131",
+          "country": "USA"
+        },
+        "Products": [
+          {
+            "isHardware": false,
+            "ProductCode": "VOSVC0216-01",
+            "Price": 7.5,
+            "E911": 0.75,
+            "RRF": 0.75,
+            "weight": 5,
+            "Qty": "1",
+            "LineItemId": "L0P0"
+          },
+          {
+            "isHardware": false,
+            "ProductCode": "VOSVC0216-02",
+            "Price": 11.25,
+            "E911": 0.75,
+            "RRF": 0.75,
+            "weight": 5,
+            "Qty": "1",
+            "LineItemId": "L0P1"
+          }
+        ]
+      }
+    ]
+  }
+}

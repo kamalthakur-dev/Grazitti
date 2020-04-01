@@ -1,0 +1,41 @@
+"taxJson" : [ {
+    "lineItemId" : "L0P0",
+    "totalTax" : "4.17"
+  }, {
+    "lineItemId" : "L0P1",
+    "totalTax" : "4.40"
+  } ],
+  "shipJson" : [ ],
+  "LocationTaxBreakdown" : [ {
+    "locId" : "a4Q0r000000Af52EAC",
+    "taxes" : [ {
+      "CA Telecom Relay Systems Surcharge" : "0.02"
+    }, {
+      "CA Local Utility Users Tax" : "1.01"
+    }, {
+      "CA Teleconnect Fund" : "0.03"
+    }, {
+      "CA High Cost Fund(a) Surcharge" : "0.02"
+    }, {
+      "CA Advanced Serv Fund Surch" : "0.02"
+    }, {
+      "CA Universal Lifeline  Surcharge" : "0.23"
+    }, {
+      "Federal Universal Service Fund" : "0.78"
+    }, {
+      "CA State And Local 911" : "0.32"
+    }, {
+      "CA San Jose 911 Telephone Tax" : "3.14"
+    }, {
+      "E911 Service Fee" : "1.50"
+    }, {
+      "Regulatory Recovery Fee" : "1.50"
+    } ]
+  } ],
+  "taxRespCode" : [ {
+    "taxResponseCode" : "9999"
+  } ],
+  "shipRespCode" : [ {
+    "shippingResponseCode" : ""
+  } ]
+}

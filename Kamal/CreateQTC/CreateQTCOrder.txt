@@ -1,0 +1,8 @@
+@RestResource(urlMapping='/CreateQTCOrder/*')
+global with sharing class CreateQTCOrder{
+    @HttpPost
+    global static void createOrder(){
+        RestRequest req = RestContext.request;
+        CreateQTCOrderUtil.insertOrder(req);
+    }
+}

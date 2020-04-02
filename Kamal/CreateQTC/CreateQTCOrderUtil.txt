@@ -1,0 +1,238 @@
+public class CreateQTCOrderUtil {
+    public static void insertOrder(RestRequest req){
+        Blob body;
+        if(req != null) body = req.requestBody;
+        System.debug('Blob value' + body);
+        String requestString = body.toString();
+        System.debug('String value' + requestString );
+        insertOrderLI(requestString);
+    }
+    
+    @future
+    public static void insertOrderLI(String requestString){
+        List<String> customFieldList = new List<String>();
+        RequestDataWrapper rw;
+        Apttus_Config2__Order__c order;
+        List<Database.SaveResult> results;
+        List<ValidateOrder__e> ValidateOrderList = new List<ValidateOrder__e>();
+        List<ProductCatWrap> pCatWrap = new List<ProductCatWrap>();
+        Map<String, ProductCatWrap> productActualPriceMap = new Map<String, ProductCatWrap>();
+        List<Apttus_Proposal__Proposal_Line_Item__c> oliToInsert = new List<Apttus_Proposal__Proposal_Line_Item__c>();
+        List<Apttus_Proposal__Proposal__c> quoteProposal = new List<Apttus_Proposal__Proposal__c>();
+        List<Apttus_CPQApi.CPQ.SelectedProductDO> selProdDOList = new List<Apttus_CPQApi.CPQ.SelectedProductDO>();
+        Apttus_CPQApi.CPQ.AddMultiProductRequestDO req;
+        Id quoteId;
+        ID cartID;
+        Map<String, ProductInfoWrapper> productsMap;
+        Map<String, Id> prodIdMap;
+        LocationWrapper locWrap;
+system.debug('RSSSSSS '+requestString);
+        if(string.isNotBlank(requestString)){
+            rw = (RequestDataWrapper)JSON.deserialize(requestString, RequestDataWrapper.class);
+            quoteId = rw.quoteId;
+            productsMap = rw.products;
+            prodIdMap = getProdIds(productsMap.keySet());
+            locWrap = rw.location;
+        }
+        
+        //Creating Cart
+        Apttus_CPQApi.CPQ.CreateCartRequestDO request = new Apttus_CPQApi.CPQ.CreateCartRequestDO();
+        if(request != NULL && String.isNotBlank(quoteId)) request.QuoteId = quoteId;
+        Apttus_CPQApi.CPQ.CreateCartResponseDO respCart = Apttus_CPQApi.CPQWebService.createCart(request);
+        if(respCart != NULL && String.isNotBlank(respCart.CartID)) cartID = respCart.CartID;
+        
+        //Getting Product Prices from Pricelist present on Quote
+system.debug('RSSSSSSquoteId'+quoteId);   
+        if(String.isNotBlank(quoteId)){
+            quoteProposal = [select id, Apttus_Proposal__Primary_Contact__c, Apttus_QPConfig__PriceListId__c, 
+                                        Apttus_Proposal__ExpectedStartDate__c, Apttus_Proposal__ExpectedEndDate__c, 
+                                        Payment_Method__c, Apttus_Proposal__Account__c from Apttus_Proposal__Proposal__c 
+                                        where id=:quoteId];
+ system.debug('RSSSSSSquoteProposal'+quoteProposal);                                        
+            if(quoteProposal.size() > 0){
+                String productCatalog = Pricinghandler.getProductPricing(quoteProposal[0].Apttus_Proposal__Account__c, quoteProposal[0].Apttus_QPConfig__PriceListId__c, '');
+system.debug('RSSSSSSproductCatalog   '+productCatalog);
+system.debug('RSSSSSSproductCatalog[0].aptt   '+quoteProposal[0].Apttus_Proposal__Account__c);
+system.debug('RSSSSSSproductCatalog[0]   '+quoteProposal[0]);
+                if(string.isNotBlank(productCatalog)){
+                    pCatWrap = (List<ProductCatWrap>) System.JSON.deserialize(productCatalog, List<ProductCatWrap>.class);
+system.debug('RSSSSSSpCatWrap   '+pCatWrap);
+                }
+            }
+            if(pCatWrap != null){
+                for(ProductCatWrap pcw : pCatWrap){
+                    if(String.isNotBlank(pcw.productName) && productsMap != null && productsMap.containsKey(pcw.productName)){
+                        productActualPriceMap.put(pcw.productName, pcw);
+                    }
+                }
+            }
+        }
+
+        //creating Proposal Line Items
+        for(String prodName : productsMap.keySet()){
+            if(prodIdMap.containsKey(prodName)){
+                Apttus_Proposal__Proposal_Line_Item__c oli = new Apttus_Proposal__Proposal_Line_Item__c();
+                oli.Apttus_QPConfig__Quantity2__c = productsMap.get(prodName).quantity;
+                oli.Apttus_Proposal__Product__c = prodIdMap.get(prodName);
+                oli.Apttus_QPConfig__AdjustmentAmount__c = productsMap.get(prodName).adjustmentAmount;
+                oli.Apttus_QPConfig__AdjustmentType__c = productsMap.get(prodName).adjustmentType;
+                oli.Apttus_QPConfig__LocationId__c = locWrap.locationId;
+                oli.Apttus_Proposal__Proposal__c = quoteId;
+                if(productActualPriceMap.containsKey(prodName)){
+                    oli.Apttus_QPConfig__BasePrice__c = productActualPriceMap.get(prodName).ActualPrice;
+                    oli.Apttus_QPConfig__ListPrice__c = productActualPriceMap.get(prodName).ActualPrice;
+                    oli.Apttus_QPConfig__NetUnitPrice__c = productActualPriceMap.get(prodName).ActualPrice;
+                    oli.Apttus_QPConfig__NetPrice__c = productActualPriceMap.get(prodName).ActualPrice * productsMap.get(prodName).quantity;
+                }
+                oliToInsert.add(oli);
+            }
+        }
+
+        if(oliToInsert != null){
+            req = new Apttus_CPQApi.CPQ.AddMultiProductRequestDO();
+            req.CartID = cartID;
+            for(Apttus_Proposal__Proposal_Line_Item__c eachItem : oliToInsert){
+                Apttus_CPQApi.CPQ.SelectedProductDO selProdDO = new Apttus_CPQApi.CPQ.SelectedProductDO();
+                if(eachItem.Apttus_QPConfig__Quantity2__c != 0) {
+                    selProdDO.Comments = 'Added for SMB Quick Quote';
+                    selProdDO.EndDate = quoteProposal[0].Apttus_Proposal__ExpectedEndDate__c;
+                    selProdDO.StartDate = quoteProposal[0].Apttus_Proposal__ExpectedStartDate__c;
+                    selProdDO.SellingTerm = 1;
+                    selProdDO.ProductId = eachItem.Apttus_Proposal__Product__c;
+                    selProdDO.Quantity = eachItem.Apttus_QPConfig__Quantity2__c;
+                    //adding Custom fields
+                    customFieldList.add('Apttus_Config2__PricingStatus__c');
+                    customFieldList.add('Apttus_Config2__ListPrice__c');
+                    customFieldList.add('Apttus_Config2__BasePrice__c');
+                    customFieldList.add('Apttus_Config2__BasePriceOverride__c');
+                    customFieldList.add('Apttus_Config2__BaseExtendedPrice__c');
+                    customFieldList.add('Apttus_Config2__ExtendedPrice__c');
+                    customFieldList.add('Apttus_Config2__AdjustedPrice__c');
+                    customFieldList.add('Apttus_Config2__NetPrice__c');
+                    customFieldList.add('Apttus_Config2__NetUnitPrice__c');
+                    customFieldList.add('Apttus_Config2__LocationId__c');
+                    customFieldList.add('First_Month_Net_Price__c');
+                    customFieldList.add('First_Month_Net_Unit_Price__c');
+                    customFieldList.add('Apttus_Config2__SellingFrequency__c');
+                    customFieldList.add('APTS_CumilativeQuantity__c');
+                    customFieldList.add('eppAppliedAndMonths__c');
+                    customFieldList.add('Apttus_Config2__PriceListItemId__c');
+                    customFieldList.add('Shipping_Charges__c');
+                    customFieldList.add('PX_Shipping_Speed__c');
+                    customFieldList.add('End_Customer_Price__c');
+                    
+                    //Adding Configuration Line Items
+                    Apttus_Config2__LineItem__c liSO = new Apttus_Config2__LineItem__c();
+                    liSO.Apttus_Config2__PricingStatus__c = 'Complete';
+                    liSO.First_Month_Net_Price__c = eachItem.First_Month_Net_Price__c;
+                    liSO.First_Month_Net_Unit_Price__c = eachItem.First_Month_Net_Unit_Price__c;
+                    liSO.Apttus_Config2__SellingFrequency__c = eachItem.Apttus_QPConfig__SellingFrequency__c;
+                    liSO.Apttus_Config2__ListPrice__c = eachItem.Apttus_QPConfig__ListPrice__c;
+                    liSO.Apttus_Config2__BasePrice__c = eachItem.Apttus_QPConfig__ListPrice__c;
+                    liSO.Apttus_Config2__BasePriceOverride__c = eachItem.Apttus_QPConfig__ListPrice__c;
+                    liSO.Apttus_Config2__BasePriceOverride__c = eachItem.Apttus_QPConfig__ListPrice__c;
+                    liSO.Apttus_Config2__LocationId__c = eachItem.Apttus_QPConfig__LocationId__c;
+                    liSO.Apttus_Config2__AdjustedPrice__c = eachItem.Apttus_QPConfig__NetPrice__c;
+                    liSO.Apttus_Config2__NetPrice__c = eachItem.Apttus_QPConfig__NetPrice__c;
+                    liSO.Apttus_Config2__NetUnitPrice__c = eachItem.Apttus_QPConfig__NetUnitPrice__c;
+                    selProdDO.CustomData = liSO;
+                    selProdDO.CustomFields = customFieldList;
+                    selProdDOList.add(selProdDO);
+                }
+            }
+
+            req.SelectedProducts = selProdDOList;
+            Apttus_CPQApi.CPQ.AddMultiProductResponseDO resp = Apttus_CPQApi.CPQWebService.addMultiProducts(req);
+            Apttus_CPQApi.CPQWebService.associateConstraintRules(cartID,null);
+            Apttus_CPQApi.CPQWebService.applyConstraintRules(cartID, false);
+            
+            Apttus_Config2__ProductConfiguration__c prodConfig = [select id, Apttus_Config2__Status__c from Apttus_Config2__ProductConfiguration__c where id=:cartID LIMIT 1];
+            if(prodConfig != null) prodConfig.Apttus_Config2__Status__c='Saved';
+            update prodConfig;
+            
+            Apttus_CPQApi.CPQ.SynchronizeCartRequestDO req1 = new Apttus_CPQApi.CPQ.SynchronizeCartRequestDO();
+            if(req1 != NULL && String.isNotBlank(cartID)) req1.CartID = cartID;
+            Apttus_CPQApi.CPQ.SynchronizeCartResponseDO resp1 = Apttus_CPQApi.CPQWebService.synchronizeCart(req1);
+            
+            Apttus_Proposal__Proposal__c quoteUpdate = new Apttus_Proposal__Proposal__c(id = quoteId);
+            quoteUpdate.Apttus_QPApprov__Approval_Status__c = 'Accepted';
+            update quoteUpdate;          
+            Apttus_Config2__Order__c OrderConfigSO = Apttus_QPConfig.QPConfigWebService.createOrder(QuoteId);
+            
+            if(OrderConfigSO != NULL){
+                order = [select id, PO_Number__c, VAR_Sub_Var_PO_Number__c, Is_WSP_Order__c, 
+                                                    ERPOrderNumber__c, name, E911_Override_Fee__c, 
+                                                    RRF_Override_Fee__c from Apttus_Config2__Order__c 
+                                                    where name=:OrderConfigSO.Name limit 1];
+                ValidateOrderList.add(new ValidateOrder__e(Order_Id__c=order.id));
+                results = EventBus.publish(ValidateOrderList);
+            }
+            
+            
+system.debug('RESSSSSSSSSS - '+results);
+        }
+    }
+    
+    public static Map<String, Id> getProdIds(Set<String> prodList){
+        Map<String, Id> prodIdMap = new Map<String, Id>();
+        if(prodList != null){
+            for(Product2 prd : [select Id, Name from Product2 where Name IN:prodList]){
+                prodIdMap.put(prd.Name, prd.Id);
+            }
+        }
+        return prodIdMap;
+    }
+    
+    public class RequestDataWrapper{
+        public String quoteId;
+        public Map<String, ProductInfoWrapper> products;
+        public LocationWrapper location;
+    }
+    
+    public class ProductInfoWrapper{
+        public Decimal quantity;
+        public Decimal netprice;
+        public Decimal baseprice;
+        public String adjustmentType;
+        public Decimal adjustmentAmount;
+    }
+    
+    public class LocationWrapper{
+        public String name;
+        public String locationId;
+        public String Street;
+        public String city;
+        public String state;
+        public String zip;
+        public String country;
+    }
+    
+    public class ProductCatWrap{
+        public String subCategory;
+        public String ProductWeight;
+        public Double productRanking;
+        public String productName;
+        public String productId;
+        public String productCode;
+        public String priceListItemId;
+        public String price;
+        public String minimumPrice;
+        public String master_Product;
+        public Boolean isTierPricing;
+        public Boolean isHardware;
+        public Boolean IsFlex;
+        public Boolean isEppApplied;
+        public Boolean IsContractPrice;
+        public Boolean is123PlanExempt;
+        public String imageUrl;
+        public String family;
+        public Boolean ExcludeFromCumulativeQty;
+        public Boolean ExcludeFromCartQty;
+        public String EppPriceComparison;
+        public String eppMonths;
+        public String Description;
+        public String category;
+        public String AddOnPricingTier;
+        public Decimal ActualPrice;
+    }
+}

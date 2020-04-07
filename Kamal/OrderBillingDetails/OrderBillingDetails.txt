@@ -1,0 +1,230 @@
+/**
+* Created By - Kamal Thakur
+* Created On - March, 2020
+* Jira - BST-5552
+* Description - Web Service returning Order Billing Details
+*               test covered by test class OrderBillingDetailsTest
+*/
+
+
+@RestResource(urlMapping='/Orders/*')
+global class OrderBillingDetails {
+    @HttpGet
+    global static OrderDetailWrapper doGet() {
+        List<Apttus_Config2__OrderLineItem__c> OrderOLIs = New List<Apttus_Config2__OrderLineItem__c>();
+        OrderDetailWrapper oWrp = new OrderDetailWrapper();
+        Map<String, ProductInfoWrapper> prodMap = new Map<String, ProductInfoWrapper>();
+        Map<String, Apttus_Config2__OrderLineItem__c> prod2OLIMap = new Map<String, Apttus_Config2__OrderLineItem__c>();
+        Map<String, Decimal> totalAdjAmount = new Map<String, Decimal>();
+        Decimal totalTaxes = 0.0;
+        Decimal totalEquipPrice = 0.0;
+        RestRequest req = RestContext.request;
+        RestResponse res = RestContext.response;
+        String orderId = req.requestURI.substring(req.requestURI.lastIndexOf('/')+1);
+        for(Apttus_Config2__Order__c orderDet : [SELECT Id, CreatedDate, Billing_Start_Date__c, CurrencyIsoCode, MRR__c, 
+                                                 Order_Total__c, Apttus_Config2__BillToAccountId__r.Primary_Contact__r.Name, 
+                                                 Apttus_QPConfig__ProposalId__r.Shipping__c, 
+                                                 Payment_Method__r.Name, Apttus_Config2__BillToAccountId__r.Primary_Contact__r.LastName, 
+                                                 Payment_Method__r.Credit_Card_Type__c, Payment_Method__r.CreditCardFirstName__c,
+                                                 Payment_Method__r.CreditCardLastName__c, Payment_Method__r.Credit_Card_Expiration_Year__c, 
+                                                 Payment_Method__r.Credit_Card_Expiration_Month__c,
+                                                 Apttus_Config2__BillToAccountId__r.Primary_Contact__r.Phone,
+                                                 Apttus_Config2__LocationId__r.Name,
+                                                 Apttus_Config2__BillToAccountId__r.Customer_ID__c, 
+                                                 Apttus_Config2__BillToAccountId__r.Account_Billing_ID__c, 
+                                                 Apttus_Config2__BillToAccountId__r.Credit_Card_Exp_Date__c, 
+                                                 Apttus_Config2__BillToAccountId__r.eRAM_Country__c, 
+                                                 Apttus_Config2__BillToAccountId__r.Primary_Contact__r.Email,
+                                                 Apttus_Config2__BillToAccountId__r.Affiliate_Code__c,  
+                                                 Apttus_Config2__BillToAccountId__r.sameAddrFlag__c, Apttus_Config2__BillToAccountId__r.Region__c, 
+                                                 Apttus_Config2__BillToAccountId__r.BillingState, Apttus_Config2__BillToAccountId__r.BillingCountry, 
+                                                 Apttus_Config2__BillToAccountId__r.BillingCity, Apttus_Config2__BillToAccountId__r.BillingPostalCode,
+                                                 Apttus_Config2__BillToAccountId__r.BillingStreet, ERPOrderNumber__c, 
+                                                 Apttus_Config2__BillToAccountId__r.Primary_Contact__r.FirstName,
+                                                 (Select Id, Apttus_Config2__NetPrice__c , Apttus_Config2__BasePrice__c, Apttus_Config2__Cost__c, Apttus_Config2__LineType__c,
+                                                  Apttus_Config2__Quantity__c, Shipping_Charges__c, Apttus_Config2__ProductId__r.Name, LineItemTaxTotal__c,
+                                                  Apttus_Config2__ProductId__r.Product_Category__c, Apttus_Config2__ProductId__r.Apttus_Config2__ProductType__c,
+                                                  Apttus_Config2__ProductId__r.QuantityUnitOfMeasure,Apttus_Config2__AdjustmentType__c, Apttus_Config2__ClassificationId__r.Name,
+                                                  Apttus_Config2__AdjustmentAmount__c,Apttus_Config2__ClassificationId__c from Apttus_Config2__OrderLineItems__r WHERE 
+                                                  Apttus_Config2__LineType__c = :Label.ProductServiceLineItem AND 
+                                                  Apttus_Config2__ProductId__r.Name != :Label.BaseNumber) FROM Apttus_Config2__Order__c 
+                                                  WHERE Id = :orderId]){
+                                                     if(orderDet != null){
+                                                         if(orderDet.Apttus_Config2__OrderLineItems__r != null){
+                                                             OrderOLIs.addAll(orderDet.Apttus_Config2__OrderLineItems__r);
+                                                         }
+                                                         if(orderDet.Apttus_Config2__BillToAccountId__c != Null){
+                                                             if(orderDet.Apttus_Config2__BillToAccountId__r.Primary_Contact__c != null){
+                                                                 oWrp.BillingDetails.customerName = orderDet.Apttus_Config2__BillToAccountId__r.Primary_Contact__r.Name;
+                                                                 oWrp.customerData.lastName = orderDet.Apttus_Config2__BillToAccountId__r.Primary_Contact__r.LastName;
+                                                                 oWrp.customerData.firstName = orderDet.Apttus_Config2__BillToAccountId__r.Primary_Contact__r.FirstName;
+                                                                 oWrp.customerData.Phone = orderDet.Apttus_Config2__BillToAccountId__r.Primary_Contact__r.Phone;
+                                                                 oWrp.customerData.CustomerName = orderDet.Apttus_Config2__BillToAccountId__r.Primary_Contact__r.Name;
+                                                                 oWrp.customerData.EmailId = orderDet.Apttus_Config2__BillToAccountId__r.Primary_Contact__r.Email;
+                                                             }
+                                                             oWrp.customerData.billingCustID = orderDet.Apttus_Config2__BillToAccountId__r.Account_Billing_ID__c;
+                                                             oWrp.customerData.country = orderDet.Apttus_Config2__BillToAccountId__r.eRAM_Country__c;
+                                                             oWrp.BillingDetails.customerId = orderDet.Apttus_Config2__BillToAccountId__r.Customer_ID__c;
+                                                             oWrp.customerData.customerId = orderDet.Apttus_Config2__BillToAccountId__r.Customer_ID__c;
+                                                             oWrp.customerData.sameAddrFlag = orderDet.Apttus_Config2__BillToAccountId__r.sameAddrFlag__c;
+                                                             oWrp.customerData.region = orderDet.Apttus_Config2__BillToAccountId__r.Region__c;
+                                                             oWrp.customerData.billState = orderDet.Apttus_Config2__BillToAccountId__r.BillingState;
+                                                             oWrp.customerData.billCountry = orderDet.Apttus_Config2__BillToAccountId__r.BillingCountry;
+                                                             oWrp.customerData.billCity = orderDet.Apttus_Config2__BillToAccountId__r.BillingCity;
+                                                             oWrp.customerData.billZip = orderDet.Apttus_Config2__BillToAccountId__r.BillingPostalCode;
+                                                             oWrp.customerData.billStreet = orderDet.Apttus_Config2__BillToAccountId__r.BillingStreet;
+                                                             
+                                                         }
+                                                         if(orderDet.Payment_Method__c != NULL){
+                                                             String cardName = '';
+                                                             oWrp.customerData.paymentMethod = orderDet.Payment_Method__r.Name;
+                                                             oWrp.customerData.ccName = orderDet.Payment_Method__r.Name;
+                                                             oWrp.customerData.cardType = orderDet.Payment_Method__r.Credit_Card_Type__c;
+                                                             if(String.isNotBlank(orderDet.Payment_Method__r.CreditCardFirstName__c)){
+                                                                 cardName = orderDet.Payment_Method__r.CreditCardFirstName__c + ' ' + orderDet.Payment_Method__r.CreditCardLastName__c;
+                                                             }else {
+                                                                 cardName = orderDet.Payment_Method__r.CreditCardLastName__c;
+                                                             }
+                                                             oWrp.customerData.nameOnCard = cardName;
+                                                             if(String.isNotBlank(orderDet.Payment_Method__r.Credit_Card_Expiration_Year__c)){
+                                                                 oWrp.customerData.ccExpYear = orderDet.Payment_Method__r.Credit_Card_Expiration_Year__c;
+                                                             }
+                                                             if(String.isNotBlank(orderDet.Payment_Method__r.Credit_Card_Expiration_Month__c)){
+                                                                 oWrp.customerData.ccExpMonth = orderDet.Payment_Method__r.Credit_Card_Expiration_Month__c;
+                                                             }
+                                                         }
+                                                         if(orderDet.Apttus_QPConfig__ProposalId__c != NULL){
+                                                             oWrp.BillingDetails.shipping = orderDet.Apttus_QPConfig__ProposalId__r.Shipping__c;
+                                                         }
+                                                         oWrp.BillingDetails.orderTotal = orderDet.Order_Total__c;
+                                                         oWrp.customerData.orderTotal = orderDet.Order_Total__c;
+                                                         oWrp.BillingDetails.mrr = orderDet.MRR__c;
+                                                         oWrp.BillingDetails.billcurrency = orderDet.CurrencyIsoCode;
+                                                         oWrp.customerData.ERPOrderNumber = orderDet.ERPOrderNumber__c;
+                                                         oWrp.customerData.createDate = orderDet.CreatedDate;
+                                                         oWrp.customerData.Addr1 = orderDet.Apttus_Config2__LocationId__r.Name;
+                                                     }
+                                                 }
+        
+        for(Apttus_Config2__OrderLineItem__c oli : OrderOLIs){
+            if(String.isNotBlank(oli.Apttus_Config2__LineType__c) 
+               && oli.Apttus_Config2__ProductId__c != NULL 
+               && oli.Apttus_Config2__ProductId__r.Name == System.Label.X4ProductName){
+                   oWrp.BillingDetails.x4BasePrice = oli.Apttus_Config2__BasePrice__c;
+                   oWrp.BillingDetails.x4Qty = oli.Apttus_Config2__Quantity__c;
+                   oWrp.BillingDetails.x4NetPrice = oli.Apttus_Config2__NetPrice__c;
+               }
+            if(oli.Apttus_Config2__ProductId__c != NULL 
+               && !totalAdjAmount.containsKey(oli.Apttus_Config2__ProductId__r.Name) 
+               && oli.Apttus_Config2__AdjustmentAmount__c != NULL){
+                   totalAdjAmount.put(oli.Apttus_Config2__ProductId__r.Name, oli.Apttus_Config2__AdjustmentAmount__c);
+            }else if(oli.Apttus_Config2__ProductId__c != NULL 
+                        && totalAdjAmount.containsKey(oli.Apttus_Config2__ProductId__r.Name)
+                        && oli.Apttus_Config2__AdjustmentAmount__c != NULL){
+                            Decimal tempAmnt = totalAdjAmount.get(oli.Apttus_Config2__ProductId__r.Name);
+                            totalAdjAmount.put(oli.Apttus_Config2__ProductId__r.Name, tempAmnt + oli.Apttus_Config2__AdjustmentAmount__c);
+            }
+            if(oli.Apttus_Config2__ProductId__c != NULL 
+               && !prod2OLIMap.containsKey(oli.Apttus_Config2__ProductId__r.Name)){
+                   prod2OLIMap.put(oli.Apttus_Config2__ProductId__r.Name, oli);
+            }
+            ProductInfoWrapper prdInst = new ProductInfoWrapper();
+            if(oli.Apttus_Config2__ProductId__c != NULL){
+                if(oli.Apttus_Config2__ProductId__r.Apttus_Config2__ProductType__c == System.Label.EquipmentProductType){
+                    if(oli.Apttus_Config2__Cost__c != null){
+                        totalEquipPrice = totalEquipPrice + oli.Apttus_Config2__Cost__c;
+                    }
+                }
+                prodMap.put(oli.Apttus_Config2__ProductId__r.Name, prdInst);
+            }
+            totalTaxes = totalTaxes + oli.LineItemTaxTotal__c;
+        }
+        for(String prodName : prodMap.keySet()){
+            if(prod2OLIMap.containsKey(prodName)){
+                ProductInfoWrapper tempPrdW = prodMap.get(prodName);
+                tempPrdW.quantity = prod2OLIMap.get(prodName).Apttus_Config2__Quantity__c;
+                if(prod2OLIMap.get(prodName).Apttus_Config2__ClassificationId__c != NULL){
+                    tempPrdW.category = prod2OLIMap.get(prodName).Apttus_Config2__ClassificationId__r.name;
+                }
+                tempPrdW.adjustmentType = prod2OLIMap.get(prodName).Apttus_Config2__AdjustmentType__c;
+                prodMap.put(prodName, tempPrdW);
+            }
+            if(totalAdjAmount.containsKey(prodName)){
+                ProductInfoWrapper tempPrdW = prodMap.get(prodName);
+                tempPrdW.adjustmentAmount = totalAdjAmount.get(prodName);
+                prodMap.put(prodName, tempPrdW);
+            }
+            
+        }
+        oWrp.product = prodMap;
+        oWrp.BillingDetails.equipmentPrice = totalEquipPrice;
+        oWrp.BillingDetails.taxes = totalTaxes;
+        
+        return oWrp; 
+    }
+    
+    global class OrderDetailWrapper{
+        public BillingDetailWrapper billingDetails;
+        public CustomerDataWrapper customerData;
+        public Map<String, ProductInfoWrapper> product;
+        OrderDetailWrapper(){
+            billingDetails = new BillingDetailWrapper();
+            customerData = new CustomerDataWrapper();
+        }
+    }
+    
+    global class BillingDetailWrapper{
+        public String customerName;
+        public String customerId;
+        public Decimal mrr;
+        public String billcurrency;
+        public Decimal taxes;
+        public Decimal equipmentPrice;
+        public Decimal shipping;
+        public Decimal orderTotal;
+        public Decimal x4BasePrice;
+        public Decimal x4Qty;
+        public Decimal x4NetPrice;
+    }
+    global class CustomerDataWrapper{
+        public String lastName;
+        public String country;
+        public String customerId;
+        public Datetime createDate;
+        public String erpOrderNumber;
+        public String firstName;
+        public String Phone;
+        public String CustomerName;
+        public String EmailId;
+        public Boolean sameAddrFlag;
+        public String billingCustID;
+        public String region;
+        public String BillStatus;
+        public String billPhone;
+        public String BillSource;
+        public Boolean isConsolidatedBilling;
+        public String BoIdCompany;
+        public String shipMethod;
+        public String paymentMethod;
+        public String Addr1;
+        public String billState;
+        public String billCountry;
+        public String billCity;
+        public String billZip;
+        public String billStreet;
+        public String cardType;
+        public String ccExpMonth;
+        public String nameOnCard;
+        public String ccExpYear;
+        public String ccName;
+        public Decimal orderTotal;
+    }
+    
+    global class ProductInfoWrapper{
+        public String category;
+        public Decimal quantity;
+        public String adjustmentType;
+        public Decimal adjustmentAmount;
+    }
+    
+}

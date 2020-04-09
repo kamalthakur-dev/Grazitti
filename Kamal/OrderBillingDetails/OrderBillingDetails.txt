@@ -42,7 +42,7 @@ global class OrderBillingDetails {
                                                  Apttus_Config2__BillToAccountId__r.BillingStreet, ERPOrderNumber__c, 
                                                  Apttus_Config2__BillToAccountId__r.Primary_Contact__r.FirstName,
                                                  (Select Id, Apttus_Config2__NetPrice__c , Apttus_Config2__BasePrice__c, Apttus_Config2__Cost__c, Apttus_Config2__LineType__c,
-                                                  Apttus_Config2__Quantity__c, Shipping_Charges__c, Apttus_Config2__ProductId__r.Name, LineItemTaxTotal__c,
+                                                  Apttus_Config2__Quantity__c, Shipping_Charges__c, Apttus_Config2__ProductId__r.Name, Apttus_Config2__ProductId__r.Family, LineItemTaxTotal__c,
                                                   Apttus_Config2__ProductId__r.Product_Category__c, Apttus_Config2__ProductId__r.Apttus_Config2__ProductType__c,
                                                   Apttus_Config2__ProductId__r.QuantityUnitOfMeasure,Apttus_Config2__AdjustmentType__c, Apttus_Config2__ClassificationId__r.Name,
                                                   Apttus_Config2__AdjustmentAmount__c,Apttus_Config2__ClassificationId__c from Apttus_Config2__OrderLineItems__r WHERE 
@@ -106,14 +106,18 @@ global class OrderBillingDetails {
                                                      }
                                                  }
         
+        Map<String, XSeriesProductInfo> XPInfo = new Map<String, XSeriesProductInfo>();
         for(Apttus_Config2__OrderLineItem__c oli : OrderOLIs){
+            
+            XSeriesProductInfo xProdInfo = new XSeriesProductInfo();
             if(String.isNotBlank(oli.Apttus_Config2__LineType__c) 
                && oli.Apttus_Config2__ProductId__c != NULL 
-               && oli.Apttus_Config2__ProductId__r.Name == System.Label.X4ProductName){
-                   oWrp.BillingDetails.x4BasePrice = oli.Apttus_Config2__BasePrice__c;
-                   oWrp.BillingDetails.x4Qty = oli.Apttus_Config2__Quantity__c;
-                   oWrp.BillingDetails.x4NetPrice = oli.Apttus_Config2__NetPrice__c;
-               }
+               && oli.Apttus_Config2__ProductId__r.Family == System.Label.xseriesfamily){
+                   xProdInfo.BasePrice = oli.Apttus_Config2__BasePrice__c;
+                   xProdInfo.Qty = oli.Apttus_Config2__Quantity__c;
+                   xProdInfo.NetPrice = oli.Apttus_Config2__NetPrice__c;
+                   XPInfo.put(oli.Apttus_Config2__ProductId__r.Name, xProdInfo);
+            }
             if(oli.Apttus_Config2__ProductId__c != NULL 
                && !totalAdjAmount.containsKey(oli.Apttus_Config2__ProductId__r.Name) 
                && oli.Apttus_Config2__AdjustmentAmount__c != NULL){
@@ -156,6 +160,7 @@ global class OrderBillingDetails {
             }
             
         }
+        oWrp.billingDetails.XSeriesInfo = XPInfo;
         oWrp.product = prodMap;
         oWrp.BillingDetails.equipmentPrice = totalEquipPrice;
         oWrp.BillingDetails.taxes = totalTaxes;
@@ -182,10 +187,16 @@ global class OrderBillingDetails {
         public Decimal equipmentPrice;
         public Decimal shipping;
         public Decimal orderTotal;
-        public Decimal x4BasePrice;
-        public Decimal x4Qty;
-        public Decimal x4NetPrice;
+        public Map<String, XSeriesProductInfo> XSeriesInfo;
+        
     }
+    
+    global class XSeriesProductInfo{
+        public Decimal BasePrice;
+        public Decimal Qty;
+        public Decimal NetPrice;
+    }
+    
     global class CustomerDataWrapper{
         public String lastName;
         public String country;

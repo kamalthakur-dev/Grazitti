@@ -114,11 +114,11 @@ system.debug('RSSSSSSS result '+result );
                 LightningCart_Wrapper_product.category  = prodIdMap.get(LineItem).Product_Category__c;
                 LightningCart_Wrapper_product.imageUrl  = prodIdMap.get(LineItem).Apttus_Config2__IconId__c;
                 LightningCart_Wrapper_product.productRanking = Integer.valueOf(prodIdMap.get(LineItem).Product_Ranking__c);
-                //LightningCart_Wrapper_product.IsFlex = '';
+                LightningCart_Wrapper_product.IsFlex = prodIdMap.get(LineItem).Is_Flex__c;
                 LightningCart_Wrapper_product.IsHardwareFlag  = String.valueOf(prodIdMap.get(LineItem).APTSCU_Is_Hardware__c);
-                //LightningCart_Wrapper_product.endCustomerPrice = LineItem.End_Customer_Price__c;
+                //LightningCart_Wrapper_product.endCustomerPrice = productsMap.get(LineItem).endCustomerPrice;
                 LightningCart_Wrapper_product.tax = 0;
-                //LightningCart_Wrapper_product.isEppApplied = LineItem.IS_EPP__c;
+                LightningCart_Wrapper_product.isEppApplied = Boolean.valueOf(productsMap.get(LineItem).isEppApplied);
                 //LightningCart_Wrapper_product.eppMonths = LineItem.Epp_Months__c;
                 if(quoteProposal != null && !quoteProposal.isEmpty()){
                     if(quoteProposal[0].Apttus_QPConfig__PriceListId__r.Tier_Based_Pricing_Needed__c)
@@ -172,7 +172,7 @@ system.debug('RSSSSSSS result '+result );
             obj.products = prods;
             obj.location = loc;
             obj.shippingMethod = shipMethod;
-            obj.contractterm = quoteProposal[0].Contract_Terms__c;
+            obj.contractterm = quoteProposal[0].Contract_Terms__c.substring(0,2);
             obj.contractEndDate = quoteProposal[0].Apttus_Proposal__ExpectedEndDate__c;
             if(quoteProposal[0].Apttus_Proposal__Account__r.Free_Month_End_Date__c != null){
                obj.is123Plan = true;
@@ -183,13 +183,14 @@ system.debug('RSSSSSSS result '+result );
         }
         String finalJSONString = JSON.serialize(finalJson);
 System.debug('FINAAAAAL-'+finalJSONString);
-        lightningCartController.createAsyncQuoteAndOrder(finalJSONString, quoteId, '');
+        //String tempJSON = '"PORefrenceJSONString" :'+'\'{"varPORefrence":"tempTEXT","distiPORefrence":"tempTEXT"}'+'\'';
+        lightningCartController.createAsyncQuoteAndOrder(finalJSONString, quoteId, '','');
     }
     
     public static Map<String, Product2> getProdIds(Set<String> prodList){
         Map<String, Product2> prodIdMap = new Map<String, Product2>();
         if(prodList != null){
-            for(Product2 prd : [select Id, Name, Product_Category__c, Product_Sub_Category__c, 
+            for(Product2 prd : [select Id, Name, Product_Category__c, Product_Sub_Category__c, Is_Flex__c,
                                         Apttus_Config2__IconId__c, Product_Ranking__c, ProductCode, 
                                         APTSCU_Is_Hardware__c, Family FROM Product2 where Name IN:prodList]){
                 prodIdMap.put(prd.Name, prd);
@@ -210,6 +211,7 @@ System.debug('FINAAAAAL-'+finalJSONString);
         public Decimal baseprice;
         public String adjustmentType;
         public Decimal adjustmentAmount;
+        public String isEppApplied;
     }
     
     public class LocationWrapper{

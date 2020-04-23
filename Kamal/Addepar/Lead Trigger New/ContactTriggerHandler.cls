@@ -65,7 +65,7 @@ public class ContactTriggerHandler extends TriggerHandler {
         this.notifier = new core_NotificationService();
         
     }
-    
+    // this method is called when beforeUpdate event happens
     public override void beforeUpdate(){
     
         this.UpdateDemoFlag();
@@ -74,7 +74,7 @@ public class ContactTriggerHandler extends TriggerHandler {
         this.notifier.flush();
         
     }
-    
+    // this method is called when insert event happens
     public override void afterInsert(){
      
         this.buildAcctIdSet(this.triggerNew);
@@ -91,6 +91,7 @@ public class ContactTriggerHandler extends TriggerHandler {
 
     }
     
+    // this method is called when update event happens
     public override void afterUpdate(){
 
         this.buildAcctIdSet(this.triggerNew);
@@ -109,6 +110,7 @@ public class ContactTriggerHandler extends TriggerHandler {
 
     } 
     
+     // this method is called when delete event happens
      public override void afterDelete(){
         
         this.buildAcctIdSet(this.oldContactMap.values());
@@ -123,7 +125,8 @@ public class ContactTriggerHandler extends TriggerHandler {
         this.notifier.flush();  
         
     }
-
+    
+    // build set of acoount id on insert,update,delete
     @TestVisible
     private void buildAcctIdSet(List<Contact> records){
 
@@ -134,7 +137,8 @@ public class ContactTriggerHandler extends TriggerHandler {
         
 
     }
-
+    
+    // method being used to identify the demo activities are created from trigger or not
     @TestVisible
     private void UpdateDemoFlag(){
 
@@ -149,7 +153,7 @@ public class ContactTriggerHandler extends TriggerHandler {
 
     }
     
-    
+      // perform all Account updates here
      @TestVisible
      private void performAccoutUpdateOperations(){
             
@@ -256,7 +260,8 @@ public class ContactTriggerHandler extends TriggerHandler {
         this.UpdateRecords(accountsToUpdateMap.values());
         System.debug('accountsToUpdateMap3333'+accountsToUpdateMap);
     } 
-     
+    
+     // This method is used to Uncheck fields of account on the basis of Edit Online Data and Edit online Tax fields
      @TestVisible
      private void deRollupMethod(){
         
@@ -297,6 +302,7 @@ public class ContactTriggerHandler extends TriggerHandler {
         
     }  
     
+    // This method is used to Update Account field HasActiveContacts Field on the basis of No_Longer_with_Firm of Contact
     @TestVisible
     private void  contactAccountUpdate(){
         
@@ -324,7 +330,7 @@ public class ContactTriggerHandler extends TriggerHandler {
         this.UpdateRecords(accountToUpdate);
 
     }
-    
+    //This method is used to fill collections to be used for processing according to the field values after insert
     @TestVisible
     private void collectionGeneratorAfterInsert(){
         
@@ -350,7 +356,8 @@ public class ContactTriggerHandler extends TriggerHandler {
         }
         
     }
-
+    
+    //This method is used to fill collections to be used for processing according to the field values after update
     @TestVisible
     private void collectionGeneratorAfterUpdate(){
     
@@ -380,7 +387,7 @@ public class ContactTriggerHandler extends TriggerHandler {
         }       
     } 
     
-    
+    //This method is used to fill collections to be used for processing according to the field values after delete 
     @TestVisible
     private void collectionGeneratorAfterDelete(){
         

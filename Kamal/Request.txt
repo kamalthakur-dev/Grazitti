@@ -1,5 +1,5 @@
 {
-  "quoteId" : "a7l0r0000008g0bAAA",
+  "quoteId" : "a7l2h0000008hQT",
   "products": {
     "X Series - X4": {
       "quantity":"1",
@@ -20,11 +20,11 @@
   },
   "location": {
     "name" : "2125 ONEL Dr, San Jose, CA, USA, 95131",
-    "locationId": "a4Q0r0000008SJt",
+    "locationId": "a4Q2h0000004e65",
     "street": "2125 ONEL Dr",
     "city": "San Jose",
     "state": "CA",
     "zip": "95131",
     "country": "USA"
   }
-}	
+}

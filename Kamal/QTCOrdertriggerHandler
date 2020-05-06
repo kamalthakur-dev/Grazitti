@@ -1,0 +1,1429 @@
+/**
+ * Created by Sai repaka on 6/11/2018.
+ */
+
+public with sharing class QTCOrdertriggerHandler {
+    public static boolean isFirstTime = true;
+    static List<Task> liTasksInsert = new List<Task>();
+    //below set is used for the referral commsion creation
+    public static Set<Id> isReferralCommQueuedSet = new Set<Id>();
+    
+    public static void onBeforeInsert(List<Apttus_Config2__Order__c> OrdersList) {
+        /****
+        Modified by Grazitti: JIRA SFDC-1334 Before Insert Event - QTC Order Trigger refactoring (July 10, 2019)
+        ****/        
+        System.debug('-------In onBeforeInsert');
+        Set<Id> quoteIds = new Set<ID>();
+        Set<Id> quotesOfOrdersWithoutAgr = new Set<Id>();
+        Set<Id> agrIdSet = new Set<Id>();
+        List<Payment_Method__c> paymentMethodList = new List<Payment_Method__c>();
+        Map<Id,Id> propId2AccHavingAssets = new Map<Id,Id>();
+        Map<Id,Apttus_Proposal__Proposal__c> quoteMap = new Map<Id,Apttus_Proposal__Proposal__c>();
+        Map<Id, Apttus__APTS_Agreement__c> agrMap = new Map<Id, Apttus__APTS_Agreement__c>();
+        Map<Id,Apttus_Config2__Order__c> existingOrders = new Map<Id,Apttus_Config2__Order__c>();        
+        Map<Id,Apttus__APTS_Agreement__c> orderProp2ExistAgr = new Map<Id,Apttus__APTS_Agreement__c> ();
+ 
+        for(Apttus_Config2__Order__c order : OrdersList) {
+            if (order.Apttus_QPConfig__ProposalId__c != null){
+                quoteIds.add(order.Apttus_QPConfig__ProposalId__c);
+                if (order.Apttus_CMConfig__AgreementId__c == null)
+                    quotesOfOrdersWithoutAgr.add(order.Apttus_QPConfig__ProposalId__c);
+            }            
+            if (order.Apttus_CMConfig__AgreementId__c != null)
+                agrIdSet.add(order.Apttus_CMConfig__AgreementId__c);            
+        }
+        system.debug('quotesOfOrdersWithoutAgr'+quotesOfOrdersWithoutAgr);
+        if (!quoteIds.isEmpty()){
+            for(Apttus_Config2__Order__c order : [Select Id, Name, Apttus_QPConfig__ProposalId__c, Apttus_QPConfig__ProposalId__r.Name ,is_Order_Case_Needed__c, Reason_why_case_is_not_needed__c, Region__c, Customer_Segment__c FROM Apttus_Config2__Order__c 
+                    WHERE Apttus_QPConfig__ProposalId__c IN:quoteIds]){
+                existingOrders.put(order.Apttus_QPConfig__ProposalId__c,order);
+            }
+            quoteMap = new Map<Id,Apttus_Proposal__Proposal__c>([Select Id,(select Id,E911_Override_Fee__c,RRF_Override_Fee__c FROM Apttus_QPConfig__Configurations__r WHERE 
+                Apttus_Config2__Status__c='Finalized' order by Apttus_Config2__VersionNumber__c desc),Apttus_Proposal__Primary_Contact__c, Apttus_Proposal__Account__c,
+                Apttus_Proposal__Account__r.Has_Assets__c,Apttus_Proposal__Opportunity__r.type,Apttus_QPConfig__ABOType__c FROM Apttus_Proposal__Proposal__c WHERE Id in: quoteIds 
+                AND Apttus_Proposal__Account__c != null]);
+        }
+       
+        if(!agrIdSet.isEmpty() || !quotesOfOrdersWithoutAgr.isEmpty()){
+            for(Apttus__APTS_Agreement__c agt : [Select Id, Name, Apttus_QPComply__RelatedProposalId__c, Hard_Date__c FROM Apttus__APTS_Agreement__c WHERE (Id IN: agrIdSet) OR 
+                (Apttus_QPComply__RelatedProposalId__c in: quotesOfOrdersWithoutAgr)]){
+                if(agrIdSet.contains(agt.Id)){
+                    agrMap.put(agt.Id,agt);
+                }
+                else if(quotesOfOrdersWithoutAgr.contains(agt.Apttus_QPComply__RelatedProposalId__c)){
+                    orderProp2ExistAgr.put(agt.Apttus_QPComply__RelatedProposalId__c,agt);
+                }
+            }
+        }
+ 
+        for(Apttus_Proposal__Proposal__c prop : quoteMap.values()){
+            if(prop.Apttus_Proposal__Account__r.Has_Assets__c == true)
+                propId2AccHavingAssets.put(prop.Id, prop.Apttus_Proposal__Account__c);
+        }
+ 
+        System.debug('propId2AccHavingAssets'+propId2AccHavingAssets);
+ 
+        if (!propId2AccHavingAssets.isEmpty()) {
+      //SR: BST-4809 
+            paymentMethodList = [Select Id, Customer_Bill_To__c,Is_QTC_Payment__c, Primary__c, Is_Primary__c FROM Payment_Method__c WHERE Customer_Bill_To__c in:propId2AccHavingAssets.values() 
+                and Is_QTC_Payment__c = true order by CreatedDate DESC];
+      }
+        Boolean populateDataFromExistAgr = !quotesOfOrdersWithoutAgr.isEmpty() && !orderProp2ExistAgr.isEmpty();
+        
+        for(Apttus_Config2__Order__c order : OrdersList) {
+            if(order.Apttus_QPConfig__ProposalId__c != null){
+                //if there's an existing order on the quote throw the error                
+                if(existingOrders.containsKey(order.Apttus_QPConfig__ProposalId__c)){
+                    Apttus_Config2__Order__c existOrder = existingOrders.get(order.Apttus_QPConfig__ProposalId__c);
+                    order.addError('There is an existing order on Quote: '+ existOrder.Apttus_QPConfig__ProposalId__r.Name +' with order number: '+existOrder.Name+'.');
+                }               
+    
+                // To auto populate Payment method when Order created on Quote with Account Has_Assets__c is True
+                if(propId2AccHavingAssets.keySet().contains(order.Apttus_QPConfig__ProposalId__c) ){
+                    String accId = propId2AccHavingAssets.get(order.Apttus_QPConfig__ProposalId__c);                    
+                    Boolean hasPrimary = false;
+                    String firstPaymentId;
+                    for(Payment_Method__c P : paymentMethodList){
+                        if(P.Customer_Bill_To__c == accId){
+                            if(firstPaymentId == null)
+                                firstPaymentId = P.id;
+              //SR: BST-4809      
+                            if(P.Primary__c){
+                                order.Payment_Method__c = P.id;
+                                hasPrimary = true;
+                                break;
+                            }
+                        }
+                    }
+                    system.debug('hasprimary'+hasPrimary);
+                    system.debug('firstPaymentId'+firstPaymentId);
+                    if(!hasPrimary && firstPaymentId != null){
+                        order.Payment_Method__c = firstPaymentId;
+                    }
+                }
+                
+                //update fields on Order from proposal
+                if(quoteMap.containsKey(order.Apttus_QPConfig__ProposalId__c)){
+                    Apttus_Proposal__Proposal__c prop = quoteMap.get(order.Apttus_QPConfig__ProposalId__c);
+                    order.Apttus_Config2__PrimaryContactId__c = prop.Apttus_Proposal__Primary_Contact__c;
+                    if(prop.Apttus_Proposal__Opportunity__r.type != null && prop.Apttus_Proposal__Opportunity__r.type == 'Upgrade')
+                        order.Order_Type__c = 'Upgrade Order';
+                    if(prop.Apttus_QPConfig__ABOType__c != null && prop.Apttus_QPConfig__ABOType__c == 'Renewal')
+                        order.Order_Type__c = 'Renewal Order';
+                    List<Apttus_Config2__ProductConfiguration__c> configs =  prop.Apttus_QPConfig__Configurations__r;
+                    if(!configs.isEmpty()){
+                        order.E911_Override_Fee__c = configs[0].E911_Override_Fee__c;
+                        order.RRF_Override_Fee__c  = configs[0].RRF_Override_Fee__c;
+                    }
+                } 
+                
+                // To auto populate Agreement on Order - Standard flow
+                if(populateDataFromExistAgr){
+                    if(order.Apttus_CMConfig__AgreementId__c == null && orderProp2ExistAgr.containsKey(order.Apttus_QPConfig__ProposalId__c)){
+                        Apttus__APTS_Agreement__c agr = orderProp2ExistAgr.get(order.Apttus_QPConfig__ProposalId__c);
+                        order.Apttus_CMConfig__AgreementId__c = agr.Id;
+                        order.Billing_Start_Date__c = agr.Hard_Date__c;                    
+                    }
+                }
+            }
+ 
+            //Stamp proposal id on order if order is created through agreement - MSA flow
+            if(!agrIdSet.isEmpty()){
+                if(order.Apttus_QPConfig__ProposalId__c == null && order.Apttus_CMConfig__AgreementId__c != null && agrMap.get(order.Apttus_CMConfig__AgreementId__c) != null) {
+                    order.Apttus_QPConfig__ProposalId__c = agrMap.get(order.Apttus_CMConfig__AgreementId__c).Apttus_QPComply__RelatedProposalId__c;
+                    order.Billing_Start_Date__c = agrMap.get(order.Apttus_CMConfig__AgreementId__c).Hard_Date__c;
+                }
+            }
+        }
+ 
+    }
+
+    public static void onAfterInsert(List<Apttus_Config2__Order__c> OrdersList){
+        //added as part of PC-1459
+        notifyW1UKOrderCreation(OrdersList);
+        //added as part of PC-2164
+        notifyW1USOrderCreation(OrdersList);
+        System.debug('-------In onAfterInsert');
+        List<Id> OrderIdList = new List<Id>();
+        Set<Id> orderIdWithQuote = new Set<Id>();
+        Set<Id> quoteIds = new Set<Id>();
+        Set<Id> orderRecIds = new Set<Id>();
+        
+        Set<Id> prm_orderRecIds = new Set<Id>();
+        Map<Id,Apttus_Proposal__Proposal__c> quoteUpdateMap = new Map<Id,Apttus_Proposal__Proposal__c>();
+        List<Apttus_Config2__Order__c> orderRecList = new List<Apttus_Config2__Order__c>();
+        List<Professional_Service_Billing_Tag__c> billTagList = new List<Professional_Service_Billing_Tag__c>();
+        List<Apttus_Config2__OrderLineItem__c> orderLineItemList = new List<Apttus_Config2__OrderLineItem__c>();
+        //Updated by Kamal - BST-5422 - Updated List to Map
+        Map<Id, Apttus_Config2__Order__c> ordersToUpdate = new Map<Id, Apttus_Config2__Order__c>();
+        Set<Id> DupreAccIdset = new Set<Id>();
+        List<Apttus_Config2__Order__c> existingordersfromAgreement = new List<Apttus_Config2__Order__c>();
+        List<Apttus_Config2__Order__c> orderListToDelete = new List<Apttus_Config2__Order__c>();
+        List<Payment_Method__c> pMListToInsert = new List<Payment_Method__c>();
+        Map<String, Id> pmOrderMap = new Map<String, Id>();
+        Boolean isMSA = false;
+       
+        Map<Id,List<Apttus_Config2__OrderLineItem__c>> proposalId2OrderLineItems = new Map<Id,List<Apttus_Config2__OrderLineItem__c>> ();
+        List<Apttus_Config2__Order__c> orderRecListTemp = new List<Apttus_Config2__Order__c>();
+        Map<Id,Apttus_Proposal__Proposal__c> quoteMap = new Map<Id,Apttus_Proposal__Proposal__c> ();
+        Set<String> propIdsOfExistingOrdersFromAgmt = new Set<String>();
+        Set<Id> renewalOrderIds = new Set<Id>();
+        List<Apttus_Config2__AccountLocation__c> accLocation = new List<Apttus_Config2__AccountLocation__c>();
+        
+        for( Apttus_Config2__Order__c order : OrdersList){
+            system.debug('order details'+ order.id + order.Apttus_Config2__Source__c + order.Contract_Flow__c);
+            if(order.Apttus_QPConfig__ProposalId__c != null){
+                quoteIds.add(order.Apttus_QPConfig__ProposalId__c);
+                orderIdWithQuote.add(order.Id);
+            }            
+            if( order.Apttus_Config2__Status__c != 'Cancelled' || !System.isFuture() ){
+                OrderIdList.add(order.Id);
+            }
+            if(order.Contract_Flow__c == 'MSA'){
+                isMSA = true;
+            }
+            if(order.Apttus_Config2__BillToAccountId__c!=null && order.Apttus_Config2__BillToAccountId__R.Has_Assets__c == false && 
+                order.Account_Owner_Role__c.contains('Du Pre PLC Partner User')){
+                DupreAccIdset.add(order.Apttus_Config2__BillToAccountId__c);
+            }
+            orderRecIds.add(order.Id);
+            if(order.Is_Partner_Order__c){
+                prm_orderRecIds.add(order.Id);
+            }
+        }
+        
+        
+        if(!DupreAccIdset.isEmpty()){
+            accLocation = [select id, Apttus_Config2__Street__c,Address2__c,Apttus_Config2__City__c,Apttus_Config2__State__c,Apttus_Config2__Country__c,
+                Apttus_Config2__PostalCode__c,AddressKey__c,Name FROM Apttus_Config2__AccountLocation__c WHERE Apttus_Config2__AccountId__c IN: DupreAccIdset Limit 1];
+        }
+        
+        system.debug('quoteIds'+quoteIds);
+        if(!quoteIds.isEmpty()){
+            quoteMap = new Map<Id,Apttus_Proposal__Proposal__c>([Select Id, Order__c,Payment_Method__c FROM Apttus_Proposal__Proposal__c WHERE Id in: quoteIds]);
+                        
+            billTagList = [Select Id, Agreement_Line_Item__r.Apttus__AgreementId__r.Apttus_QPComply__RelatedProposalId__c, 
+                Agreement_Line_Item__r.Apttus_CMConfig__DerivedFromId__c, Order__c , Order_Line_Item__c, Agreement_Line_Item__r.Apttus__ProductId__c FROM 
+                Professional_Service_Billing_Tag__c WHERE Agreement_Line_Item__r.Apttus__AgreementId__r.Apttus_QPComply__RelatedProposalId__c IN: quoteIds AND 
+                (Order__c = null OR Order_Line_Item__c = null)];
+            
+            orderLineItemList = [Select Id, Apttus_Config2__OrderId__c, Apttus_Config2__OrderId__r.Apttus_QPConfig__ProposalId__c, 
+                Apttus_Config2__DerivedFromId__c, Apttus_Config2__ProductId__c FROM Apttus_Config2__OrderLineItem__c WHERE Apttus_Config2__OrderId__c != null  
+                AND Apttus_Config2__OrderId__c IN: OrdersList order by Apttus_Config2__OrderId__r.Apttus_Config2__Source__c DESC];
+        }
+        if(!orderRecIds.isEmpty())
+            orderRecListTemp = [Select Id, name,Apttus_Config2__ActivatedDate__c,Apttus_Config2__OrderStartDate__c,
+                    Apttus_QPConfig__ProposalId__r.Apttus_QPConfig__ABOType__c,Apttus_QPConfig__ProposalId__c,isDemo__c, 
+                    Apttus_Config2__BillToAccountId__c,Account_Owner_Role__c,Apttus_Config2__BillToAccountId__R.isDemo__C, 
+                    Apttus_Config2__BillToAccountId__R.Has_Assets__c,Apttus_Config2__BillToAccountId__r.Owner_Role__c, 
+                    Apttus_Config2__BillToAccountId__r.Name, Apttus_QPConfig__ProposalId__r.Apttus_Proposal__Account__c, 
+                    Apttus_Config2__RelatedOpportunityId__r.CatalogType__c, Apttus_Config2__RelatedOpportunityId__r.type,
+                    Contract_Flow__c, Apttus_Config2__Source__c,Apttus_Config2__BillToAccountId__R.Sales_Channel_L2__c  FROM Apttus_Config2__Order__c WHERE (Id IN: orderRecIds) OR 
+                    (Apttus_QPConfig__ProposalId__c IN: quoteIds AND Contract_Flow__c = 'MSA' AND Apttus_Config2__Source__c = 'Agreement')];           
+
+           for(Apttus_Config2__Order__c ord : orderRecListTemp){
+               if(orderRecIds.contains(ord.Id)){
+                   orderRecList.add(ord);
+                    if (ord.Apttus_QPConfig__ProposalId__r.Apttus_QPConfig__ABOType__c == 'Renewal') {
+                        renewalOrderIds.add(ord.Id);
+                    }
+                   if(ord.Apttus_Config2__BillToAccountId__c!=null && ord.Apttus_Config2__BillToAccountId__R.Has_Assets__c == false && 
+                       ord.Account_Owner_Role__c.contains('Du Pre PLC Partner User')){
+                       Payment_Method__c PM = new Payment_Method__c();
+                       PM.Account__c = ord.Apttus_Config2__BillToAccountId__c;
+                       PM.Payment_Type__c = 'Invoice' ;
+                       if(!accLocation.isEmpty())
+                           PM.Billing_Address__c = accLocation[0].id;                     
+                       if(Test.isRunningTest() && ord.Apttus_QPConfig__ProposalId__r.Apttus_Proposal__Account__c == null) {
+                           PM.Customer_Bill_To__c= ord.Apttus_Config2__BillToAccountId__c;
+                       }else{
+                           PM.Customer_Bill_To__c= ord.Apttus_QPConfig__ProposalId__r.Apttus_Proposal__Account__c;
+                       }  
+                       PM.Primary__c = true;
+                       PM.Name = 'Invoice';
+                       PM.Is_QTC_Payment__c = true;
+                       PM.Order_Number__c = ord.Name;
+                       pMListToInsert.add(PM);
+                   }                   
+               }  
+               if(isMSA && quoteIds.contains(ord.Apttus_QPConfig__ProposalId__c) && ord.Contract_Flow__c == 'MSA' && 
+                   ord.Apttus_Config2__Source__c == 'Agreement'){
+                   //existingordersfromAgreement.add(ord);
+                   propIdsOfExistingOrdersFromAgmt.add(ord.Apttus_QPConfig__ProposalId__c);
+               }         
+           }     
+       
+        // To insert Payment Method for 'Du Pre' Account Order
+        if(pMListToInsert.size()>0){
+            insert pMListToInsert;
+            for(Payment_Method__c PM : pMListToInsert){
+                pmOrderMap.put(PM.Order_Number__c, PM.Id);
+            }
+        }       
+        List<Id> orderIdsForApproval = new List<Id>();
+        for (ID orderId : OrderIdList) {
+            if (!renewalOrderIds.contains(orderId)) {
+                orderIdsForApproval.add(orderId);
+            }
+        }
+        // send orders to approval
+        if( !orderIdsForApproval.isEmpty() ){
+            OrderApprovalRequestQueueable orderApprovalReq = new OrderApprovalRequestQueueable(orderIdsForApproval);
+            ID jobID = System.enqueueJob(orderApprovalReq);
+        }
+ 
+        for( Apttus_Config2__Order__c sObjOrder : OrdersList) { 
+            // To update Order field in Quote object           
+            if (quoteMap.get(sObjOrder.Apttus_QPConfig__ProposalId__c) != null) {                
+                Apttus_Proposal__Proposal__c quoteRec = quoteMap.get(sObjOrder.Apttus_QPConfig__ProposalId__c);
+                quoteRec.Order__c = sObjOrder.Id;  
+                if (pmOrderMap.containsKey(sObjOrder.Name)) 
+                    quoteRec.Payment_Method__c = pmOrderMap.get(sObjOrder.Name);
+                quoteUpdateMap.put(quoteRec.Id,quoteRec);
+            } 
+                        
+            System.debug('sObjOrder.Contract_Flow__c'+sObjOrder.Contract_Flow__c+'   sObjOrder.Apttus_Config2__Source__c '+sObjOrder.Apttus_Config2__Source__c);
+            
+            if (sObjOrder.Contract_Flow__c == 'MSA' && sObjOrder.Apttus_Config2__Source__c == 'Quote' && propIdsOfExistingOrdersFromAgmt.contains(sObjOrder.Apttus_QPConfig__ProposalId__c)) {
+                // Delete duplicate orders
+                orderListToDelete.add(sObjOrder);                                          
+            }
+        }
+ 
+        if (!orderRecList.isEmpty()) {
+            //Updated by Kamal for BST-5422 - Updates because updated ordersToUpdate from List to Map
+            for (Apttus_Config2__Order__c eachOrderRec : orderRecList) { 
+                Apttus_Config2__Order__c eachOrder;
+                if(ordersToUpdate.containsKey(eachOrderRec.Id)){
+                    eachOrder = ordersToUpdate.get(eachOrderRec.Id);
+                }else {
+                    eachOrder = eachOrderRec;
+                }
+                String orderNumber = eachOrderRec.name;
+                orderNumber = orderNumber.right(8); 
+                if (eachOrder.Apttus_QPConfig__ProposalId__r.Apttus_QPConfig__ABOType__c == 'Renewal') {
+                    orderNumber = Label.Renewal_Order_Start_Index + orderNumber;  
+                } 
+                else if(eachOrder.Apttus_Config2__BillToAccountId__R.Sales_Channel_L2__c == 'Online' && eachOrder.Apttus_Config2__RelatedOpportunityId__r.type != 'Upgrade'){
+                    orderNumber = Label.Ecomm_Order_Start_Index + orderNumber;  
+                }
+                else if(eachOrder.Apttus_Config2__BillToAccountId__R.Has_Assets__c) {
+                    if (eachOrder.Apttus_Config2__RelatedOpportunityId__r.type != 'Upgrade') 
+                        orderNumber = Label.Add_On_Order_Start_Index + orderNumber; 
+                    else {
+                        orderNumber = Label.Upgrade_Order_Start_Index + orderNumber; 
+                    }    
+                } else {
+                    orderNumber = Label.Customer_Order_start_index + orderNumber; 
+                }
+                eachOrder.ERPOrderNumber__c = orderNumber;                             
+               
+                if(eachOrder.isDemo__c != eachOrder.Apttus_Config2__BillToAccountId__R.isDemo__C){
+                    eachOrder.isDemo__c = eachOrder.Apttus_Config2__BillToAccountId__R.isDemo__C;
+                }                
+                if (pmOrderMap.containsKey(eachOrder.Name)) {
+                    eachOrder.Payment_Method__c = pmOrderMap.get(eachOrder.Name);                    
+                } 
+                // Code for Auto Activation for Auto Renewals, added by cloudparadigm
+                if(eachOrder.Apttus_Config2__OrderStartDate__c != null
+                        && eachOrder.Apttus_QPConfig__ProposalId__r.Apttus_QPConfig__ABOType__c == 'Renewal'
+                        && eachOrder.Apttus_Config2__ActivatedDate__c != eachOrder.Apttus_Config2__OrderStartDate__c)
+                {
+                    eachOrder.Apttus_Config2__ActivatedDate__c = eachOrder.Apttus_Config2__OrderStartDate__c;
+                    
+                }
+                ordersToUpdate.put(eachOrder.id, eachOrder);
+            }
+        }
+ 
+        for(Apttus_Config2__OrderLineItem__c ol : orderLineItemList){
+            if(ol.Apttus_Config2__OrderId__r.Apttus_QPConfig__ProposalId__c != null){
+                if(!proposalId2OrderLineItems.containsKey(ol.Apttus_Config2__OrderId__r.Apttus_QPConfig__ProposalId__c))
+                    proposalId2OrderLineItems.put(ol.Apttus_Config2__OrderId__r.Apttus_QPConfig__ProposalId__c,new List<Apttus_Config2__OrderLineItem__c>{ol});     
+                else{
+                    proposalId2OrderLineItems.get(ol.Apttus_Config2__OrderId__r.Apttus_QPConfig__ProposalId__c).add(ol);
+                }
+            }           
+        }
+ 
+        List<Professional_Service_Billing_Tag__c> tagsToUpdate = new List<Professional_Service_Billing_Tag__c>();
+        //updateProfessionBillTag records
+        if(!quoteIds.isEmpty()){
+            for(Professional_Service_Billing_Tag__c pTag : billTagList){               
+                if(proposalId2OrderLineItems.containsKey(pTag.Agreement_Line_Item__r.Apttus__AgreementId__r.Apttus_QPComply__RelatedProposalId__c)){
+                    for(Apttus_Config2__OrderLineItem__c ol : proposalId2OrderLineItems.get(
+                               pTag.Agreement_Line_Item__r.Apttus__AgreementId__r.Apttus_QPComply__RelatedProposalId__c)){
+                        if(pTag.Agreement_Line_Item__r.Apttus_CMConfig__DerivedFromId__c == ol.Apttus_Config2__DerivedFromId__c || 
+                            pTag.Agreement_Line_Item__r.Apttus__ProductId__c == ol.Apttus_Config2__ProductId__c){
+                            
+                            pTag.Order__c = ol.Apttus_Config2__OrderId__c;
+                            pTag.Order_Line_Item__c = ol.Id;
+                            tagsToUpdate.add(pTag);
+                            system.debug('tagsToUpdate111'+tagsToUpdate);
+                            break;
+ 
+                        }
+                    }
+                }
+            }
+        }
+        system.debug('tagsToUpdate'+tagsToUpdate);
+        try{
+        if(!ordersToUpdate.isEmpty())
+            update ordersToUpdate.values();
+        if(!quoteUpdateMap.isEmpty())
+            update quoteUpdateMap.values();
+        if(!orderListToDelete.isEmpty())
+            delete orderListToDelete;
+        if(!tagsToUpdate.isEmpty())
+            update tagsToUpdate;
+        } catch(Exception e){
+            System.debug(e.getMessage());
+        }
+        //JIRA : PC-1466 - Sharing Order with CP and other field   
+        if(!prm_orderRecIds.isEmpty()){ 
+          if(!System.isFuture() && !System.isBatch()){
+            Database.executeBatch(new PRM_Order_QuoteSharingBatch(prm_orderRecIds,'Order',false), 500);
+          }else{
+            PRM_Order_QuoteSharingBatch btch = new PRM_Order_QuoteSharingBatch(prm_orderRecIds,'Order',false);  
+            String STR_SQL = btch.generateQuery(prm_orderRecIds);
+            System.Debug('STR_SQL__________'+STR_SQL);
+            if(STR_SQL != null && STR_SQL != ''){
+                btch.processExecution(Database.Query(STR_SQL));
+            }
+          }
+        }
+        
+        //BST-4896
+        if(!System.isBatch() && !System.isFuture() && !System.isQueueable()){
+            sendEmailForSpecialTerms(orderRecIds);
+            if(!orderIdWithQuote.isEmpty()){
+                System.enqueueJob(new createDocOnOrderInsert(orderIdWithQuote));
+            }
+        }
+    }
+
+    public static void onBeforeUpdate(List<Apttus_Config2__Order__c> OrdersList, Map<Id, Apttus_Config2__Order__c> mapOldOrder) {
+        //BST-2921
+        createTaskforVCCDR(OrdersList,mapOldOrder);
+        List<Apttus_Config2__Order__c> OrdersListToPresent = new List<Apttus_Config2__Order__c>();
+        System.debug('-------In onBeforeUpdate'); 
+        List<Apttus_Config2__Order__c> clarizenOrders = new List<Apttus_Config2__Order__c>();
+        Set<Id> orderIds = new Set<Id>();
+        //below ser is used for the referral commission code
+        Set<Id> odrList = new set<Id>();
+        /*BST-4386 - Limit isCaseNeeded logic to Implementation SKU - Start */
+        Boolean CreateCase;
+        List<ValidImplementationProducts__c> validProduct = ValidImplementationProducts__c.getall().values();
+        Set<String> validImplProductCode = new Set<String>();
+        for(ValidImplementationProducts__c vipc:validProduct){
+            validImplProductCode.add(vipc.name);
+        }        
+        /*BST-4386 - Limit isCaseNeeded logic to Implementation SKU - End */
+        
+        /* BST-5138 - Start */
+        Set<String> VOImplCaseSkipProdList = new Set<String>();
+        Set<String> VOImplCaseSkipRegionList = new Set<String>();
+        Set<String> VOImplCaseSkipCustType = new Set<String>();
+        string OrdCustRegionCustSegment = '';
+
+        // load list of Prod that can be used to skip the VO Impl case creation.
+        VOImplCaseSkipProdList.addAll(Label.VOImplCaseSkipProdList.Split(','));
+        // load region where VO Impl case creation Can be skipped
+        VOImplCaseSkipRegionList.addAll(Label.VOImplCaseSkipRegionList.Split(','));
+        // load cust type where VO Impl case creation Can be skipped
+        VOImplCaseSkipCustType.addAll(Label.VOImplCaseSkipCustType.Split(','));
+
+        
+        /* BST-5138 - End  */
+
+        //case fields from order to send to future method
+        for(Apttus_Config2__Order__c odr : OrdersList){
+            /*BST-4386 - Limit isCaseNeeded logic to Implementation SKU - Start */
+            CreateCase = true;
+            OrdCustRegionCustSegment = odr.Region__c +':'+ odr.Customer_Segment__c;
+            
+            /*BST-4386 - Limit isCaseNeeded logic to Implementation SKU - End */
+            
+            //For Clarizen
+            System.debug('Clarizen :'+odr.Apttus_Config2__Status__c +'___'+ odr.Apttus_Config2__Status__c != mapOldOrder.get(odr.Id).Apttus_Config2__Status__c);
+            
+            if ((odr.Apttus_Config2__Status__c == 'Processed' || odr.Apttus_Config2__Status__c == 'Activated') && 
+                (odr.Has_Implementation_SKU__c != mapOldOrder.get(odr.Id).Has_Implementation_SKU__c)
+                    && (odr.Has_Implementation_SKU__c==true)) {
+                clarizenOrders.add(odr);                  
+            }
+            if(odr.Order_Type__c != null && odr.Order_Type__c == 'Upgrade Order' && odr.Apttus_Config2__Status__c == 'Processed' && odr.Upgrade_Downgrade_JobStatus__c != 
+                mapOldOrder.get(odr.Id).Upgrade_Downgrade_JobStatus__c){
+                
+                if(odr.Upgrade_Downgrade_JobStatus__c =='Processing Errors'){
+                    odr.Apttus_Config2__Status__c = 'Processing Errors';
+                }else if(odr.Upgrade_Downgrade_JobStatus__c =='Success'){
+                    odr.Apttus_Config2__Status__c = 'Activated';
+                }
+            } 
+            if(!odr.Is_Presented_To_Customer__c){
+                if(odr.Order_Type__c == 'Online' && odr.Apttus_Config2__Status__c == 'Activated'){
+                    odr.Is_Presented_To_Customer__c=true;
+                    OrdersListToPresent.add(odr);
+                }
+                else if(odr.Order_Type__c == 'Self service' && odr.Apttus_Config2__Status__c == 'Processed'){
+                    odr.Is_Presented_To_Customer__c=true;
+                    OrdersListToPresent.add(odr);
+                }    
+            }
+              if((odr.Apttus_Config2__Status__c == 'Processed' || (odr.isSelfServe__c == true && odr.Apttus_Config2__Status__c == 'Activated')) &&(odr.Apttus_Config2__Status__c != mapOldOrder.get(odr.Id).Apttus_Config2__Status__c) && 
+                (odr.Order_Type__c != null && odr.Order_Type__c != 'Upgrade Order') && !isReferralCommQueuedSet.contains(odr.Id)){
+                    odrList.add(odr.Id);
+                    isReferralCommQueuedSet.add(odr.Id);
+                }  
+        }
+ 
+        System.debug(' OrdersList :'+OrdersList);
+        
+        // Below class if for Case creation : Commenting as part of BST-5443
+       /* if(QTCOrdcheckRecursive.runCaseOnce() && !odrList.isEmpty() && !System.isFuture() ){
+            CreateCaseForQtcOrders updateJob = new CreateCaseForQtcOrders(orderIds,billtoIds,OppIds,quotePropId,odrList,orderIdTocaseSub,orderIdTopaymentMethod,orderIdToERPOrder,orderIdToprimaryConId,orderIdToCurrency,orderIdToscheduleBR,orderIdToBillStartDate);
+            ID jobID = System.enqueueJob(updateJob);
+            System.debug('CreateCaseForQtcOrders : '+jobID);
+        } */
+        // Below code is for the referral commission creation
+        if(!odrList.isEmpty() && !System.isFuture()){
+            referralAutoCreateCommissions refJob = new referralAutoCreateCommissions(odrList);
+            ID jobRefID = System.enqueueJob(refJob);
+            System.debug('referralAutoCreateCommissions : '+jobRefID);
+        }
+        
+        system.debug('clarizenOrders'+clarizenOrders);
+        if(QTCOrdcheckRecursive.runOnce() && !clarizenOrders.isEmpty()){
+            updateProjectswithOrderdata.onAfterupdate(clarizenOrders);
+        }
+        if(!OrdersListToPresent.isEmpty()){
+            eCommOrderNotification.sendEmailTemplate(OrdersListToPresent);
+        }
+    }
+
+
+    public static void onAfterUpdate(Map<Id, Apttus_Config2__Order__c> mapOldOrder, Map<Id, Apttus_Config2__Order__c> mapNewOrder) {
+
+        Set<Id> setValidatedOrderId = new Set<Id>();
+        List<Apttus_Config2__Order__c> validatedOrderList = new List<Apttus_Config2__Order__c>();
+        Map<Id, Apttus_Config2__Order__c> OppIdtoOrderMap = new Map<Id, Apttus_Config2__Order__c>();
+        Set<Id> quoteIds = new Set<Id>();
+        Set<Id> agreementIds = new Set<Id>();
+        Set<Id> agreementsIDToUpdate = new Set<Id>();
+        List<Apttus__APTS_Agreement__c> agreementsToUpdate = new List<Apttus__APTS_Agreement__c>();
+        Set<Id> oppIds = new Set<Id>();
+        List<Opportunity> oppToUpdate= new List<Opportunity>();
+        Map<Id, Apttus_Config2__Order__c> accIdtoOrder = new Map<Id, Apttus_Config2__Order__c>();
+        Set<Id> accIds = new Set<Id>();
+        List<Account> acctoUpdate = new List<Account>();
+        List<Billing_Scope__c> billScopeList = new List<Billing_Scope__c>();
+        List<String> MigrationOrderIDs = new List<String>();
+        Set<id> UOOrderiDs = new Set<id>();
+        Set<Id> propIds = new Set<Id>();
+        Set<Id> prm_orderRecIds = new Set<Id>();
+        Set<Id> accIdsToUpdateMRR = new Set<Id>();
+        List<Apttus_Proposal__Proposal__c> propList = new List<Apttus_Proposal__Proposal__c>();
+        List<Account> accListtoUpdateforRenewals = new List<Account>();
+        
+        //Addition by Kamal for BST-5422 - Child Order BD Automation
+        Map<Id, Date> initAccIdsWithBDate = new Map<Id, Date>();
+        Map<Id, Apttus_Config2__Order__c> orderToUpdate = new Map<Id, Apttus_Config2__Order__c>();
+        
+        //Addition by Kamal for BST-5422 - Addon Order Automation - Start
+        Set<Id> orderAccIds = new Set<Id>();
+        List<Apttus_Config2__Order__c> allAddonOrders = new List<Apttus_Config2__Order__c>();
+        Map<Id, Date> accId2InitialOrderBDate = new Map<Id, Date>();
+        Map<Id, String> orderToOpportunityTyp = new Map<Id, String>();
+        
+        for(Apttus_Config2__Order__c  ordOp : [SELECT id, Apttus_Config2__RelatedOpportunityId__r.Type from Apttus_Config2__Order__c 
+                            WHERE Id IN:mapNewOrder.keyset()]){
+            orderToOpportunityTyp.put(ordOp.Id, ordOp.Apttus_Config2__RelatedOpportunityId__r.Type);
+        }
+        //Addition by Kamal for BST-5422 - Addon Order Automation - End
+        
+        //BIZ-1386
+        Map<ID, ID> ordIDAccIDMap = new Map<ID, ID>();
+        List<Account> accListToUpdateMRR = new List<Account>();
+        Map<Id, List<Apttus_Config2__Order__c>> mrrMapping = new Map<Id, List<Apttus_Config2__Order__c>>();
+        
+        for(Apttus_Config2__Order__c sObjOrder : mapNewOrder.values()){
+            //Addition by Kamal for BST-5422 - Child Order BD Automation - Starts
+            if(orderToOpportunityTyp.containsKey(sObjOrder.Id) && orderToOpportunityTyp.get(sObjOrder.Id) == 'New Business'
+                    && sObjOrder.Apttus_Config2__BillToAccountId__c !=null && 
+                    sObjOrder.Billing_Start_Date__c != NULL && 
+                    sObjOrder.Billing_Start_Date__c != mapOldOrder.get(sObjOrder.Id).Billing_Start_Date__c){
+
+                initAccIdsWithBDate.put(sObjOrder.Apttus_Config2__BillToAccountId__c, sObjOrder.Billing_Start_Date__c);
+            }
+            //Addition by Kamal for BST-5422 - Child Order BD Automation - Ends
+            
+            //Addition by Kamal for BST-5422 - Addon Order Automation - Start
+            if(sObjOrder.Apttus_Config2__BillToAccountId__c != null && orderToOpportunityTyp.get(sObjOrder.Id) == 'Add-On Business'
+            && (sObjOrder.Apttus_Config2__Status__c == 'Processed' || sObjOrder.Apttus_Config2__Status__c == 'Activated')
+            && mapOldOrder.get(sObjOrder.Id).Apttus_Config2__Status__c != sObjOrder.Apttus_Config2__Status__c){
+                orderAccIds.add(sObjOrder.Apttus_Config2__BillToAccountId__c);
+                allAddonOrders.add(sObjOrder);
+            }
+            //Addition by Kamal for BST-5422 - Addon Order Automation - Ends
+            
+            if(TaxSwitch__c.getValues('ACHNewFlow') != null && TaxSwitch__c.getValues('ACHNewFlow').TaxSwitchValue__c == 'True' && String.isNotBlank(sObjOrder.Payment_Method_Type__c) && MRRValueWithCountries__c.getValues(sObjOrder.Region__c) != null && MRRValueWithCountries__c.getValues(sObjOrder.Region__c).Payment_Method__c != null && (MRRValueWithCountries__c.getValues(sObjOrder.Region__c).Payment_Method__c).ContainsIgnoreCase(sObjOrder.Payment_Method_Type__c)){ 
+                if(sObjOrder.Apttus_Config2__Status__c != mapOldOrder.get(sObjOrder.Id).Apttus_Config2__Status__c && sObjOrder.Apttus_Config2__Status__c == 'Processed' && sObjOrder.Credit_Check_Status__c=='Complete' && Label.PaymentTermsEnabledCountry.ContainsIgnoreCase(sObjOrder.Region__c)){
+                    List<Apttus_Config2__Order__c> orderList = mrrMapping.get(sObjOrder.Apttus_Config2__BillToAccountId__c);
+                    if(orderList == null) orderList = new List<Apttus_Config2__Order__c>();
+                    orderList.add(sObjOrder);
+                    mrrMapping.put(sObjOrder.Apttus_Config2__BillToAccountId__c, orderList);
+                }
+            }
+            
+            if(sObjOrder.Apttus_Config2__RelatedOpportunityId__c != null && mapOldOrder != null && mapOldOrder.containsKey(sObjOrder.Id) && mapOldOrder.get(sObjOrder.Id).Apttus_Config2__RelatedOpportunityId__c != sObjOrder.Apttus_Config2__RelatedOpportunityId__c && sObjOrder.Is_Partner_Order__c){
+                prm_orderRecIds.add(sObjOrder.Id);
+            }
+
+            if(sObjOrder.Customer_accepted__c || (sObjOrder.Apttus_Config2__Status__c == 'Activated' || sObjOrder.Apttus_Config2__Status__c == 'Processed' )){
+                if((sObjOrder.Apttus_Config2__Status__c == 'Activated' || sObjOrder.Apttus_Config2__Status__c == 'Processed') && sObjOrder.Apttus_Config2__Status__c != mapOldOrder.get(sObjOrder.Id).Apttus_Config2__Status__c){
+                    OppIdtoOrderMap.put(sObjOrder.Apttus_Config2__RelatedOpportunityId__c,sObjOrder);
+                }
+                System.debug('sObjOrder.Billing_Benefit_type__c'+sObjOrder.Billing_Benefit_type__c);
+                if(!sObjOrder.Is_Add_On_Order__c  && sObjOrder.Billing_Benefit_type__c == 'Uniform Contracting' && sObjOrder.Customer_accepted__c && sObjOrder.Customer_accepted__c != mapOldOrder.get(sObjOrder.Id).Customer_accepted__c){
+                    accIdtoOrder.put(sObjOrder.Account_Id__c, sObjOrder);
+                }
+                If((sObjOrder.Order_Type__c != null && sObjOrder.Order_Type__c == 'Upgrade Order') && sObjOrder.Customer_accepted__c && sObjOrder.Customer_accepted__c != mapOldOrder.get(sObjOrder.Id).Customer_accepted__c){
+                    UOOrderiDs.add(sObjOrder.id);
+                }
+                if(sObjOrder.Apttus_Config2__Status__c == 'Activated' && sObjOrder.Apttus_QPConfig__ProposalId__c != null && sObjOrder.Apttus_Config2__Status__c != mapOldOrder.get(sObjOrder.Id).Apttus_Config2__Status__c) {
+                    propIds.add(sObjOrder.Apttus_QPConfig__ProposalId__c);
+                }
+                //BIZ-1386
+                if(sObjOrder.Apttus_Config2__Status__c == 'Activated' && sObjOrder.Apttus_QPConfig__ProposalId__c != null && sObjOrder.Apttus_Config2__Status__c != mapOldOrder.get(sObjOrder.Id).Apttus_Config2__Status__c && sObjOrder.Target_Billing_System__c == 'GTV' && (sObjOrder.Existing_VO_VCC_Seats__c <= 0 || sObjOrder.Existing_VO_VCC_Seats__c == null)) {
+                    ordIDAccIDMap.put(sObjOrder.ID, sObjOrder.Apttus_Config2__SoldToAccountId__c);              
+                }
+            }
+            //BIZ-1386
+            if(ordIDAccIDMap != null && ordIDAccIDMap.keySet().size() > 0) {
+                createAPILogs(ordIDAccIDMap);
+              }
+
+            if((sObjOrder.Order_Type__c != null && sObjOrder.Order_Type__c == 'Upgrade Order') && (sObjOrder.Apttus_Config2__Status__c == 'Processed' || sObjOrder.Apttus_Config2__Status__c == 'Processing Errors') && ((sObjOrder.Upgrade_Downgrade_JobStatus__c =='Processing Errors' && sObjOrder.Upgrade_Downgrade_JobStatus__c != mapOldOrder.get(sObjOrder.Id).Upgrade_Downgrade_JobStatus__c ) || (sObjOrder.Upgrade_Downgrade_JobStatus__c =='Partial Success' && sObjOrder.Upgrade_Downgrade_JobStatus__c != mapOldOrder.get(sObjOrder.Id).Upgrade_Downgrade_JobStatus__c ))){
+                List<String> toAddresses = new List<String>();
+                String addresses = UserInfo.getUserEmail();
+                Services__c service = Services__c.getInstance('SMPEmailNotification');
+                if (service != null) {
+                    if (service.EndPointURL__c != null)
+                        addresses = addresses + ',' + service.EndPointURL__c;
+                }
+                toAddresses = addresses.split(',');
+                String errorLog = 'Content of Attachment';
+                SA8x8_EmailUtility.sendEmail(toAddresses, 'Upgrade Order : '+sObjOrder.ERPOrderNumber__c+' Job Failed due to '+sObjOrder.Upgrade_Downgrade_JobStatus__c, sObjOrder.Upgrade_Downgrade_JobReason__c, errorLog);
+            }
+ 
+ 
+            if(!UOOrderiDs.isEmpty())
+                SubmitUOtoBoomi(UOOrderiDs,true);
+
+            if(sObjOrder.Apttus_Config2__Status__c == 'Validated' && sObjOrder.Apttus_Config2__Status__c != mapOldOrder.get(sObjOrder.Id).Apttus_Config2__Status__c && isFirstTime){
+                setValidatedOrderId.add(sObjOrder.id);
+                validatedOrderList.add(sObjOrder);
+               String TaxType = TaxSwitch__c.getValues('TaxType').TaxSwitchValue__c;
+                if(TaxType == Label.Vertex){
+                    if(Test.isRunningTest()) {
+                        Database.executeBatch(new OrderChargesBatch(sObjOrder.Id), 200);
+                        break;
+                    } else {
+                        Database.executeBatch(new OrderChargesBatch(sObjOrder.Id),1);
+                    }
+                    isFirstTime = false;
+                }else{
+                    if(Test.isRunningTest()) {
+                        Database.executeBatch(new FulfillmentChargesbatch(sObjOrder.Id), 200);
+                        break;
+                    } else {
+                        Database.executeBatch(new FulfillmentChargesbatch(sObjOrder.Id),1);
+                    }
+                }
+            }
+
+            if(sObjOrder.TriggerApproval__c == true && sObjOrder.TriggerApproval__c != mapOldOrder.get(sObjOrder.Id).TriggerApproval__c)
+                Apttus_Approval.ApprovalsWebService.submitForApprovals('Apttus_Config2__Order__c',sObjOrder.id);
+
+            if(sObjOrder.TriggerStatusChangeViaBoomi__c == true && sObjOrder.TriggerStatusChangeViaBoomi__c != mapOldOrder.get(sObjOrder.Id).TriggerStatusChangeViaBoomi__c)
+                SSP_CartHelper.TriggerStatusChangeViaBoomi(sObjOrder.ERPOrderNumber__c,'Validated');
+
+            if(sObjOrder.Apttus_QPConfig__ProposalId__c != null && sObjOrder.Payment_Method__c != null && sObjOrder.Payment_Method__c != mapOldOrder.get(sObjOrder.Id).Payment_Method__c)
+                quoteIds.add(sObjOrder.Apttus_QPConfig__ProposalId__c);
+
+            if(sObjOrder.Apttus_CMConfig__AgreementId__c != null && sObjOrder.Apttus_CMConfig__AgreementId__c != mapOldOrder.get(sObjOrder.Id).Apttus_CMConfig__AgreementId__c)
+                agreementIds.add(sObjOrder.Apttus_CMConfig__AgreementId__c);
+
+            if((sObjOrder.Contract_Number__c == null && ! sObjOrder.Is_Add_On_Order__c && sObjOrder.Contract_Flow__c =='Standard' && sObjOrder.Apttus_Config2__Status__c =='Validated' &&
+                    sObjOrder.Apttus_Config2__Status__c  != mapOldOrder.get(sObjOrder.Id).Apttus_Config2__Status__c && sObjOrder.Apttus_CMConfig__AgreementId__c != null)|| Test.isRunningTest()){
+                agreementsIDToUpdate.add(sObjOrder.Apttus_CMConfig__AgreementId__c );
+
+            }
+
+            if(sObjOrder.Order_type__c != Null && sObjOrder.Order_type__c == 'Migration Order' && sObjOrder.Apttus_Config2__Status__c == 'Activated' && mapOldOrder.get(sObjOrder.Id).Apttus_Config2__Status__c != 'Activated' && sObjOrder.ERPOrderNumber__c != Null){
+                MigrationOrderIDs.add(sObjOrder.Id);
+            }
+
+            if(sObjOrder.Billing_Start_Date__c!=null && (sObjOrder.Apttus_Config2__Status__c == 'Activated' || sObjOrder.Apttus_Config2__Status__c == 'Processed') &&  sObjOrder.Billing_Start_Date__c  != mapOldOrder.get(sObjOrder.Id).Billing_Start_Date__c ){
+                List<FulFillMentSplit__c> fulfil = [select Id,Schedule_Billing_Date__c from FulFillMentSplit__c where Order__r.Id=:sObjOrder.Id and (svcOnlyOrder__c = True and ERP_Ready__c = null)];
+                if(fulfil.Size()>0 ){
+                    for(FulFillMentSplit__c FF : fulfil){
+                        FF.Schedule_Billing_Date__c = sObjOrder.Billing_Start_Date__c;
+                    }
+                    update fulfil;
+                }
+
+                oppIds.add(sObjOrder.Apttus_Config2__RelatedOpportunityId__c);
+            }
+            if(sObjOrder.Billing_Push__c && sObjOrder.Billing_Push__c != mapOldOrder.get(sObjOrder.Id).Billing_Push__c){
+                oppIds.add(sObjOrder.Apttus_Config2__RelatedOpportunityId__c);
+            }
+        }
+        
+        if(!mrrMapping.isEmpty()){
+            calculatePaymentTerm(mrrMapping, accListToUpdateMRR);
+        }
+        
+        //Addition by Kamal for BST-5422 - Addon Order Automation - Start
+        if(!orderAccIds.isEmpty()){
+            for(Apttus_Config2__Order__c odr : [select id, name, Apttus_Config2__BillToAccountId__c, Is_Add_On_Order__c, isSelfServe__c,
+                                                            Apttus_Config2__RelatedOpportunityId__r.Type, 
+                                                            Billing_Start_Date__c, ERPOrderNumber__c from Apttus_Config2__Order__c where 
+                                                            Apttus_Config2__BillToAccountId__c In :orderAccIds and 
+                                                            Apttus_Config2__RelatedOpportunityId__r.Type = 'New Business' 
+                                                            and Billing_Start_Date__c != null]){
+                accId2InitialOrderBDate.put(odr.Apttus_Config2__BillToAccountId__c, odr.Billing_Start_Date__c);
+            }
+            
+            for(Apttus_Config2__Order__c adonOrder : allAddonOrders){
+                if(accId2InitialOrderBDate.containsKey(adonOrder.Apttus_Config2__BillToAccountId__c)){
+                    if(accId2InitialOrderBDate.get(adonOrder.Apttus_Config2__BillToAccountId__c) > Date.today()){
+                        orderToUpdate.put(adonOrder.id, new Apttus_Config2__Order__c(  id = adonOrder.id, 
+                                                                                        Billing_Start_Date__c = accId2InitialOrderBDate.get(adonOrder.Apttus_Config2__BillToAccountId__c),
+                                                                                        Apttus_QPConfig__ProposalId__c = adonOrder.Apttus_QPConfig__ProposalId__c,
+                                                                                        Apttus_Config2__BillToAccountId__c = adonOrder.Apttus_Config2__BillToAccountId__c,
+                                                                                        Apttus_Config2__RelatedOpportunityId__c = adonOrder.Apttus_Config2__RelatedOpportunityId__c,
+                                                                                        ERPOrderNumber__c = adonOrder.ERPOrderNumber__c, isDemo__c = adonOrder.isDemo__c, 
+                                                                                        Payment_Method__c = adonOrder.Payment_Method__c, Apttus_Config2__OrderStartDate__c = adonOrder.Apttus_Config2__OrderStartDate__c,
+                                                                                        Apttus_Config2__ActivatedDate__c = adonOrder.Apttus_Config2__ActivatedDate__c
+                                                                                        ));
+                    }else if(accId2InitialOrderBDate.get(adonOrder.Apttus_Config2__BillToAccountId__c) <= Date.today()){
+                        orderToUpdate.put(adonOrder.id, new Apttus_Config2__Order__c(  id = adonOrder.id, Billing_Start_Date__c = Date.today(),
+                                                                                        Apttus_QPConfig__ProposalId__c = adonOrder.Apttus_QPConfig__ProposalId__c,
+                                                                                        Apttus_Config2__BillToAccountId__c = adonOrder.Apttus_Config2__BillToAccountId__c,
+                                                                                        Apttus_Config2__RelatedOpportunityId__c = adonOrder.Apttus_Config2__RelatedOpportunityId__c,
+                                                                                        ERPOrderNumber__c = adonOrder.ERPOrderNumber__c, isDemo__c = adonOrder.isDemo__c, 
+                                                                                        Payment_Method__c = adonOrder.Payment_Method__c, Apttus_Config2__OrderStartDate__c = adonOrder.Apttus_Config2__OrderStartDate__c,
+                                                                                        Apttus_Config2__ActivatedDate__c = adonOrder.Apttus_Config2__ActivatedDate__c));
+                    }
+                }
+            }
+        }
+        
+        //Addition by Kamal for BST-5422 - Addon Order Automation - End
+        
+        //Addition by Kamal for BST-5422 - Child Order BD Automation - Start
+        if(!initAccIdsWithBDate.isEmpty()){
+            for(Apttus_Config2__Order__c ordRec : [Select id, name, Apttus_Config2__BillToAccountId__c, Is_Add_On_Order__c, 
+                                                            Billing_Start_Date__c,  Apttus_Config2__RelatedOpportunityId__r.Type
+                                                             from Apttus_Config2__Order__c where 
+                                                            Apttus_Config2__BillToAccountId__c In :initAccIdsWithBDate.keyset() 
+                                                            AND Apttus_Config2__RelatedOpportunityId__r.Type = 'Add-On Business' 
+                                                            AND (Apttus_Config2__Status__c = 'Processed' OR Apttus_Config2__Status__c = 'Activated')]){
+                if(initAccIdsWithBDate.containsKey(ordRec.Apttus_Config2__BillToAccountId__c)){
+                    orderToUpdate.put(ordRec.Id, new Apttus_Config2__Order__c(id = ordRec.Id, Billing_Start_Date__c = initAccIdsWithBDate.get(ordRec.Apttus_Config2__BillToAccountId__c)));
+                }
+            }
+        }
+        //Addition by Kamal for BST-5422 - Child Order BD Automation - Ends
+        
+
+        if(!propIds.isEmpty()) {
+            propList = [
+                    SELECT Id,Apttus_Proposal__Account__c,
+                            Apttus_Proposal__Account__r.Contract_Terms__c,
+                            Apttus_Proposal__Account__r.Contract_End_Date__c,
+                            Apttus_Proposal__Account__r.APTS_Is_Asset_Processed__c,
+                            Apttus_Proposal__Account__r.APTS_Renewal_Term__c,
+                            Apttus_QPConfig__ABOType__c,
+                            Apttus_Proposal__Opportunity__c
+                    FROM Apttus_Proposal__Proposal__c
+                    WHERE Id IN:propIds
+                    // AND Apttus_QPConfig__ABOType__c = 'Renewal'
+            ];
+        }
+
+        if(!accIdtoOrder.isEmpty())
+            acctoUpdate = [Select id, Billing_Benefit_type__c , Free_Month_End_Date__c,Free_Month_Period__c from Account where id in: accIdtoOrder.keySet()];
+
+        // To update Order field in Billing scope
+        if(!agreementIds.isEmpty() || Test.isRunningTest()){
+            billScopeList = [Select Id, Agreement__c, Services__c from Billing_Scope__c where Agreement__c in: agreementIds];
+            List<Apttus_Config2__OrderLineItem__c> orderLineItemList = [Select Id, Apttus_Config2__OrderId__r.Apttus_CMConfig__AgreementId__c, Apttus_Config2__ProductId__c, Apttus_Config2__OrderId__c from Apttus_Config2__OrderLineItem__c where Apttus_Config2__OrderId__r.Apttus_CMConfig__AgreementId__c in: agreementIds];
+            for(Billing_Scope__c b: billScopeList){
+                for(Apttus_Config2__OrderLineItem__c a : orderLineItemList){
+                    if(b.Agreement__c == a.Apttus_Config2__OrderId__r.Apttus_CMConfig__AgreementId__c && b.Services__c == a.Apttus_Config2__ProductId__c){
+                        b.Order__c = a.Apttus_Config2__OrderId__c;
+                    }
+                }
+            }
+        }
+ 
+        // To update agreement status
+        if(! agreementsIDToUpdate.isEmpty()){
+            for(Apttus__APTS_Agreement__c agree : [Select id,Apttus__Status_Category__c,Apttus__Status__c from Apttus__APTS_Agreement__c where ID IN:agreementsIDToUpdate]){
+                agree.Apttus__Status_Category__c  ='In Effect';
+                agree.Apttus__Status__c= 'Activated';
+                agreementsToUpdate.add(agree);
+            }
+        }
+
+        // To update Opportunity fields
+            // BST-4615 - To Change the Opp close date to today's Date if Order got signed by docusign
+        if(!OppIdtoOrderMap.isEmpty()){
+            for(Opportunity opp : [Select id, StageName, Order__c, MRR__c, Number_of_VO_Extensions__c, Number_of_VCC_Seats__c, Order_Link_URL__c, Order_Type__c, CloseDate, Primary_Interest__c From Opportunity Where Id IN: OppIdtoOrderMap.keySet() and StageName !='Closed Clean up' And StageName != 'Closed Won']){
+                if(opp.StageName !='Closed Clean up' && opp.StageName != 'Closed Won'){
+                    if(opp.Order_Type__c == 'Replacement Order' || opp.Order_Type__c == 'Deployment Order')
+                        opp.StageName = 'Closed Clean up';
+                    else
+                            opp.StageName = 'Closed Won';
+                            opp.CloseDate = system.today(); 
+                }
+               // opp.Number_of_VO_Extensions__c = OppIdtoOrderMap.get(opp.Id).Number_Of_VO_Lines__c;
+                //opp.Number_of_VCC_Seats__c = OppIdtoOrderMap.get(opp.Id).Number_Of_VCC_Lines__c;
+                opp.MRR__c= (OppIdtoOrderMap.get(opp.Id).MRR_Value_of_Order__c);
+                opp.Order__c = OppIdtoOrderMap.get(opp.Id).Id;
+                if(OppIdtoOrderMap.get(opp.Id).Order_Type__c == 'Online'){
+                    opp.Sales_Channel_L2__c = 'Online';
+                    opp.CatalogType__c = 'X Series';
+                    opp.OwnerId = UserInfo.getUserId();
+                    opp.Primary_Interest__c = 'VO';
+                   // opp.CurrencyIsoCode = OppIdtoOrderMap.get(opp.Id).CurrencyIsoCode;
+                 } 
+                opptoUpdate.add(Opp);
+            }
+        }
+
+        // To update account fields
+        System.debug('acctoUpdate'+acctoUpdate);
+        if(!acctoUpdate.isEmpty()){
+            for(Account acc : acctoUpdate){
+                System.debug('addon'+accIdtoOrder.get(acc.Id).Is_Add_On_Order__c);
+                System.debug('accIdtoOrder.get(acc.Id).Apttus_QPConfig__ProposalId__r.Billing_Benefit_type__c '+accIdtoOrder.get(acc.Id).Billing_Benefit_type__c );
+                if(!accIdtoOrder.get(acc.Id).Is_Add_On_Order__c && accIdtoOrder.get(acc.Id).Billing_Benefit_type__c == 'Uniform Contracting'){
+                    Datetime orderDatetime =  accIdtoOrder.get(acc.Id).Apttus_Config2__OrderDate__c;
+                    acc.Billing_Benefit_type__c = 'Uniform Contracting';
+                    if(accIdtoOrder.get(acc.Id).Free_Month_Period__c != null) {
+                        acc.Free_Month_Period__c = integer.valueof(accIdtoOrder.get(acc.Id).Free_Month_Period__c);
+                        acc.Free_Month_End_Date__c = orderDatetime.date().addDays(integer.valueof(accIdtoOrder.get(acc.Id).Free_Month_Period__c )-1);
+                    }
+                }
+            }
+        }
+
+        if(!propList.isEmpty()){
+            for (Apttus_Proposal__Proposal__c prop : propList) {
+                if (prop.Apttus_Proposal__Account__c != null && (prop.Apttus_QPConfig__ABOType__c == 'Renewal' || prop.Apttus_Proposal__Account__r.APTS_Is_Asset_Processed__c == true))
+                {
+                    Account acc = new Account();
+                    acc.Id = prop.Apttus_Proposal__Account__c;
+                    if (prop.Apttus_QPConfig__ABOType__c == 'Renewal') {
+                        if (prop.Apttus_Proposal__Account__r.APTS_Renewal_Term__c == 'M2M') {
+                            acc.Contract_Terms__c = 'Month to Month';
+                            acc.Contract_End_Date__c = null;
+
+                        } else if (prop.Apttus_Proposal__Account__r.APTS_Renewal_Term__c == '12M') {
+                            acc.Contract_Terms__c = '12';
+
+                        }
+
+                    }
+                    if(prop.Apttus_Proposal__Account__r.APTS_Is_Asset_Processed__c == true){
+                        acc.APTS_Is_Asset_Processed__c = false;
+                    }
+                    accListtoUpdateforRenewals.add(acc);
+                }
+            }
+        }
+
+        OrderUtils.createUpdatePriceList(mapNewOrder.values(), mapOldOrder);
+
+        //CreateCommunityAdminUser.CreateCommunityAdminUserForOrder(mapNewOrder.values(), mapOldOrder);
+
+        if(MigrationOrderIDs.size() > 0){
+            Integer jobs = [Select count() From AsyncApexJob Where JobType = 'BatchApex' and (Status = 'Queued' or Status = 'Processing' or Status = 'Preparing' )];
+            if (jobs > 4) {
+                MigrationOrdersBatch OrdersBatch = new MigrationOrdersBatch(MigrationOrderIDs);
+                String cronID = System.scheduleBatch(OrdersBatch, 'MigrationOrdersBatch-' + MigrationOrderIDs, 1);
+            } else {
+                Database.executeBatch(new MigrationOrdersBatch(MigrationOrderIDs),1);
+            }
+
+        }
+
+        if(!billScopeList.isEmpty()){
+            update billScopeList;
+        }
+        if(!opptoUpdate.isEmpty()){
+            update opptoUpdate;
+        }
+        if(!agreementsToUpdate.isEmpty()){
+            update agreementsToUpdate;
+        }
+
+        if(!accIdtoOrder.isEmpty() || !accListToUpdateMRR.isEmpty()){
+            List<Account> accListToUpdateFinally = new List<Account>();
+            accListToUpdateFinally.addAll(acctoUpdate);
+            accListToUpdateFinally.addAll(accListToUpdateMRR);
+            update accListToUpdateFinally;
+        }
+
+        if(!accListtoUpdateforRenewals.isEmpty()){
+            update accListtoUpdateforRenewals;
+        }
+        //Added by Kamal - BST-5422
+        if(!orderToUpdate.isEmpty()){
+            update orderToUpdate.values();
+        }
+
+        System.debug(oppIds);
+
+        if(!QTCOrdcheckRecursive.runOnce1() && oppIds != null && !oppIds.isEmpty() && !System.isBatch() && !System.isFuture() && !System.isQueueable() ){
+            System.debug('Inside the call');
+            //accountDetailCallout.BillingPushCallout(accIds, false, true, oppIds,true);
+            Integer jobs = [Select count() From AsyncApexJob Where JobType = 'BatchApex' and (Status = 'Queued' or Status = 'Processing' or Status = 'Preparing' )];
+            if (jobs > 4) {
+                String cronID = System.scheduleBatch(new ordrePushToBillingBatch(oppIds), 'ordrePushToBillingBatch', 1);
+            } else {
+                Database.executeBatch(new ordrePushToBillingBatch(oppIds),1);
+            }
+        }
+        
+        //JIRA : PC-1466 - Sharing Order with CP and other field As Opportunity is linked after order creation, so moved the logic to after update  
+        if(!prm_orderRecIds.isEmpty()){  
+            if(!System.isFuture() && !System.isBatch()){
+                Database.executeBatch(new PRM_Order_QuoteSharingBatch(prm_orderRecIds,'Order',false), 500);
+            }else{
+                PRM_Order_QuoteSharingBatch btch = new PRM_Order_QuoteSharingBatch(prm_orderRecIds,'Order',false);
+                String STR_SQL = btch.generateQuery(prm_orderRecIds);
+                System.Debug('STR_SQL__________'+STR_SQL);
+                if(STR_SQL != null && STR_SQL != ''){
+                    btch.processExecution(Database.Query(STR_SQL));
+                }
+            }
+
+        }
+    }
+
+    public static void calculatePaymentTerm(Map<Id, List<Apttus_Config2__Order__c>> orderMapWithAcc, List<Account> accList){
+        if(!orderMapWithAcc.isEmpty()){
+            for(Account acc : [SELECT Id, Total_Account_MRR__c,Payment_Terms__c FROM Account WHERE ID IN: orderMapWithAcc.keySet()]){
+                Double accMRR = acc.Total_Account_MRR__c == null ? 0 :  acc.Total_Account_MRR__c ; 
+                for(Apttus_Config2__Order__c ordr : orderMapWithAcc.get(acc.Id)){
+                    if(MRRValueWithCountries__c.getValues(ordr.Region__c) != null){
+                        Double MRRValue = MRRValueWithCountries__c.getValues(ordr.Region__c).MRRValue__c != null ?MRRValueWithCountries__c.getValues(ordr.Region__c).MRRValue__c:0;
+                        Double ordrMRR = ordr.MRR_Value_of_Order__c == null ? 0 :  ordr.MRR_Value_of_Order__c ; 
+                        if(((ordr.Apttus_Config2__Type__c == 'New' && ordrMRR > MRRValue) || (ordr.Apttus_Config2__Type__c == 'Add On' && accMRR + ordrMRR > MRRValue)) && acc.Payment_Terms__c != MRRValueWithCountries__c.getValues(ordr.Region__c).Payment_Term__c){
+                            acc.Payment_Terms__c= MRRValueWithCountries__c.getValues(ordr.Region__c).Payment_Term__c;
+                            accList.add(acc);
+                        }
+                    }
+                }
+            }
+        }
+    }
+ 
+    @Future(callout=true)
+    public static void SubmitUOtoBoomi(Set<Id> orderids, Boolean UpdateAssets){
+        List<Apttus_Config2__Order__c> totalUOorderlist = new list<Apttus_Config2__Order__c>([select id,ERPOrderNumber__c,Apttus_Config2__Status__c,Error_Type__c,ErrorDetails__c, Order_Type__c, Apttus_Config2__BillToAccountId__r.Customer_ID__c, Apttus_Config2__BillToAccountId__r.Sales_Channel_L2__c from Apttus_Config2__Order__c where id in:orderids]);
+        String endpoint = End_Point__c.getValues('SubmitUpgradeOrder').End_Point_URL__c;
+        for(Apttus_Config2__Order__c odr:totalUOorderlist){
+            String request = getsubmitUOrequestbody(odr.id);
+            System.debug('uorequestbody'+request);
+            HttpResponse response = new HttpResponse();
+            if(!test.isRunningTest()){
+                response = HttpCallOut.invokePostJSON(endpoint, request);
+                System.debug('response uo'+response);
+                if (response.getStatusCode() == 200) {
+                        if(odr.Apttus_Config2__BillToAccountId__r.Sales_Channel_L2__c == 'Online'){
+                            eCommCancellationApi.UpgradeEcommCustomer(odr.Apttus_Config2__BillToAccountId__r.Customer_ID__c);
+                            System.enqueueJob(new createAddonOrderQueueable((odr.Apttus_Config2__BillToAccountId__c)));
+                        }
+                    odr.Apttus_Config2__Status__c = 'Processed';
+                    UpdateAssets(orderids);
+                }else{
+                    odr.Apttus_Config2__Status__c = 'Processing Errors';
+                    odr.Error_Type__c = 'Push To Boomi Failure';
+                    odr.ErrorDetails__c = 'Salesforce to Boomi Connection Failed.';
+                    List<String> toAddresses = new List<String>();
+                    String addresses = UserInfo.getUserEmail();
+                    Services__c service = Services__c.getInstance('SFDCEmailNotification');
+                    if (service != null) {
+                        if (service.EndPointURL__c != null)
+                            addresses = addresses + ',' + service.EndPointURL__c;
+                    }
+                    toAddresses = addresses.split(',');
+                    String errorLog = 'Content of Attachment';
+                    SA8x8_EmailUtility.sendEmail(toAddresses, 'Upgrade Order : '+odr.ERPOrderNumber__c+' Submit to Boomi Failure','Reason', errorLog);
+                }
+            }
+
+            Exception_Handling__c UpgradeAPICallLog = new Exception_Handling__c();
+            UpgradeAPICallLog.Type__c = 'Upgrade  - Submit to Boomi - API Call';
+            UpgradeAPICallLog.Logged_User__c = UserInfo.getUserId();
+            UpgradeAPICallLog.Class_Name__c = 'QTCOrderTriggerHandler';
+            UpgradeAPICallLog.Method_Name__c = 'SubmitUOtoBoomi';
+            UpgradeAPICallLog.QTCOrder__c = odr.id;
+            UpgradeAPICallLog.Request__c = request;
+            UpgradeAPICallLog.Response_Code__c= String.valueOf(response.getStatusCode());
+            if(!test.isRunningTest()) insert UpgradeAPICallLog;
+        }
+        update totalUOorderlist;
+    }
+
+    public static string getsubmitUOrequestbody(String OrderID){
+        JSONGenerator UOJSON = JSON.createGenerator(true);
+        UOJSON.writeStartObject();
+        UOJSON.writeFieldName('request');
+        UOJSON.writeStartObject();
+        UOJSON.writeObjectField('requestId',OrderID);
+        UOJSON.writeObjectField('orderId',OrderID);
+        UOJSON.writeEndObject();
+        UOJSON.writeEndObject();
+        return UOJSON.getAsString();
+    }
+
+        public static void UpdateAssets(Set<Id> orderids){
+        Map<String,Id> licensetoOLMap = new Map<String,Id>();
+        Set<String> assetLineItemIds = new Set<String>();
+        Set<String> orderlineItemIds = new Set<String>();
+        Map<String, String> AlToOlMap = new Map<String, String>();
+        Map<id,Apttus_Config2__OrderLineItem__c> OrderLineitemMap= new Map<id,Apttus_Config2__OrderLineItem__c>();
+        Map<id,Apttus_Config2__AssetLineItem__c> assetMap = new Map<id,Apttus_Config2__AssetLineItem__c> ();
+        Map<String,Asset_Details__c> licensetoAssetDetailMap = new Map<String,Asset_Details__c>();
+        Id AccountId;
+        Id AccOwnerId;
+        String OrderNumber;
+        String AccountName;
+        Boolean IsEcommAccount= false; 
+
+        try{
+            for(Upgrade_Downgrade_Lines__c eachLine :[select id,UpgradedFromOL__c,UpgradedTo_OL__c,LicenseId__c,UpgradedTo_OL__r.Apttus_Config2__OriginalAssetLineItemId__c, UpgradedTo_OL__r.Apttus_Config2__AssetLineItemId__c, QTCOrder__r.ERPOrderNumber__c, QTCOrder__r.OwnerId, QTCOrder__r.Apttus_Config2__BillToAccountId__c,QTCOrder__r.Apttus_Config2__BillToAccountId__r.Sales_Channel_L2__c, QTCOrder__r.Apttus_Config2__BillToAccountId__r.Name from Upgrade_Downgrade_Lines__c where QTCOrder__c IN: orderids])
+            {
+                licensetoOLMap.put(eachLine.LicenseId__c,eachLine.UpgradedTo_OL__r.id);
+                orderlineItemIds.add(eachLine.UpgradedTo_OL__r.id);
+                assetLineItemIds.add(eachLine.UpgradedTo_OL__r.Apttus_Config2__AssetLineItemId__c);
+                assetLineItemIds.add(eachLine.UpgradedTo_OL__r.Apttus_Config2__OriginalAssetLineItemId__c);
+                if(IsEcommAccount == false && eachLine.QTCOrder__r.Apttus_Config2__BillToAccountId__c != null && eachLine.QTCOrder__r.Apttus_Config2__BillToAccountId__r.Sales_Channel_L2__c=='Online'){
+                    AccountId = eachLine.QTCOrder__r.Apttus_Config2__BillToAccountId__c;
+                    AccOwnerId = eachLine.QTCOrder__r.OwnerId;
+                    OrderNumber = eachLine.QTCOrder__r.ERPOrderNumber__c;
+                    AccountName = eachLine.QTCOrder__r.Apttus_Config2__BillToAccountId__r.name;
+                    IsEcommAccount = true;
+                }
+            }
+
+            System.debug('licensetoOLMap'+licensetoOLMap);
+            System.debug('assetLineItemIds'+assetLineItemIds);
+            System.debug('orderlineItemIds'+orderlineItemIds);
+ 
+            if(!orderlineItemIds.isEmpty())
+                OrderLineitemMap = new Map<Id, Apttus_Config2__OrderLineItem__c>([Select Id,Apttus_Config2__Quantity__c,Apttus_Config2__OriginalAssetLineItemId__c,Apttus_Config2__AssetLineItemId__c from Apttus_Config2__OrderLineItem__c where Id IN: orderlineItemIds]);
+
+            if(!licensetoOLMap.isEmpty())
+                for(Asset_Details__c eachAssetDetail :[select id,Status__c,License_ID__c,Asset_Line_Item__c,Order_Line_Item__c,Effective_Date__c from Asset_Details__c where License_ID__c IN: licensetoOLMap.keySet()])
+                {
+                    licensetoAssetDetailMap.put(eachAssetDetail.License_ID__c, eachAssetDetail);
+                    assetLineItemIds.add(eachAssetDetail.Asset_Line_Item__c);
+                }
+
+            for(Apttus_Config2__OrderLineItem__c ol : [Select Id,Apttus_Config2__AssetLineItemId__c from Apttus_Config2__OrderLineItem__c where Apttus_Config2__AssetLineItemId__c IN:assetLineItemIds and Apttus_Config2__LineStatus__c Not In ('Cancelled','Upgraded')]){
+                AlToOlMap.put(ol.Apttus_Config2__AssetLineItemId__c, ol.Id);
+            }
+ 
+            System.debug('licensetoAssetDetailMap'+licensetoAssetDetailMap);
+ 
+            if(!assetLineItemIds.isEmpty())
+                assetMap = new Map<Id, Apttus_Config2__AssetLineItem__c>([Select Id,Apttus_Config2__Quantity__c,Apttus_Config2__AssetStatus__c,Apttus_Config2__NetPrice__c  from Apttus_Config2__AssetLineItem__c where Id IN: assetLineItemIds]);
+
+            System.debug('assetMap'+assetMap);
+ 
+            for(String licenseId : licensetoOLMap.keyset()){
+                //assetMap.get(OrderLineitemMap.get(licensetoOLMap.get(licenseId)).Apttus_Config2__OriginalAssetLineItemId__c).Apttus_Config2__Quantity__c --;
+                assetMap.get(OrderLineitemMap.get(licensetoOLMap.get(licenseId)).Apttus_Config2__OriginalAssetLineItemId__c).Apttus_Config2__AssetStatus__c = 'Activated';
+                assetMap.get(OrderLineitemMap.get(licensetoOLMap.get(licenseId)).Apttus_Config2__OriginalAssetLineItemId__c).Apttus_Config2__IsInactive__c = false;
+                assetMap.get(OrderLineitemMap.get(licensetoOLMap.get(licenseId)).Apttus_Config2__AssetLineItemId__c).Apttus_Config2__AssetStatus__c = 'Activated';
+                assetMap.get(OrderLineitemMap.get(licensetoOLMap.get(licenseId)).Apttus_Config2__AssetLineItemId__c).Apttus_Config2__IsInactive__c = false;
+                if(licensetoAssetDetailMap.get(licenseId) != null) {
+                    /*assetMap.get((licensetoAssetDetailMap.get(licenseId)).Asset_Line_Item__c).Apttus_Config2__Quantity__c --;
+                    if(assetMap.get((licensetoAssetDetailMap.get(licenseId)).Asset_Line_Item__c).Apttus_Config2__Quantity__c != 0){
+                        assetMap.get((licensetoAssetDetailMap.get(licenseId)).Asset_Line_Item__c).Apttus_Config2__IsInactive__c = false;
+                    }else{
+                        assetMap.get((licensetoAssetDetailMap.get(licenseId)).Asset_Line_Item__c).Apttus_Config2__IsInactive__c = true;
+                    }*/
+
+                    if(licensetoAssetDetailMap.get(licenseId).Order_Line_Item__c == null && AlToOlMap.get(licensetoAssetDetailMap.get(licenseId).Asset_Line_Item__c) != null)
+                        licensetoAssetDetailMap.get(licenseId).Order_Line_Item__c =  AlToOlMap.get(licensetoAssetDetailMap.get(licenseId).Asset_Line_Item__c);
+
+
+                    licensetoAssetDetailMap.get(licenseId).Asset_Line_Item__c = OrderLineitemMap.get(licensetoOLMap.get(licenseId)).Apttus_Config2__AssetLineItemId__c;
+                    licensetoAssetDetailMap.get(licenseId).Effective_Date__c = Date.today();
+                    licensetoAssetDetailMap.get(licenseId).License_Swapped__c = false;
+                }
+            }
+            if(!assetMap.isEmpty())
+                update assetMap.values();
+            if(!licensetoAssetDetailMap.isEmpty())
+                update licensetoAssetDetailMap.values();
+             
+            if(IsEcommAccount){
+                Update (new Account(Id=AccountId, OwnerId = AccOwnerId, Sales_Channel_L2__c ='', isDemo__c=false, DemoType__c=''));
+                List<String> toAddresses = new List<String>();
+                String addresses;
+                Services__c service = Services__c.getInstance('eCommEmailNotificationQueue');
+                if (service != null) {
+                if (service.EndPointURL__c != null)
+                    addresses = service.EndPointURL__c;
+                }
+                toAddresses = addresses.split(',');
+                String errorLog = 'Content of Attachment';
+                SA8x8_EmailUtility.sendEmail(toAddresses, AccountName+' : eCommerce Customer is Upgraded Successfully','OrderNumber : '+OrderNumber, errorLog);
+          } 
+
+        }  catch (Exception exe) {
+            String errorLog = '';
+            errorLog = errorLog  + ' \r\n' + exe.getStackTraceString() + ' ' + exe.getMessage() + '' +  exe.getTypeName() + '' + exe.getCause() +  ' \r\n';
+            Exception_Handling__c UpgradeAssetlog = new Exception_Handling__c();
+            UpgradeAssetlog.Type__c = 'Asset Upgrade update';
+            UpgradeAssetlog.Logged_User__c = UserInfo.getUserId();
+            UpgradeAssetlog.Class_Name__c = 'QTCOrdertriggerHandler';
+            UpgradeAssetlog.QTCOrder__c = (new list<Id>(orderids)[0] );
+            UpgradeAssetlog.Response__c= errorLog;
+            UpgradeAssetlog.Method_Name__c = 'Updating Assets';
+            if(!test.isRunningTest()) insert UpgradeAssetlog;
+        }
+    }
+    /* Below two Methods commented by Kamal Thakur */
+    /* JIRA: BST-5364*/
+    /*
+    public static void ApiCallout(List<Apttus_Config2__Order__c> orderlist,Map<Id, Apttus_Config2__Order__c> oldmap){
+        set<id> orderids = new set<id>();
+        for(Apttus_Config2__Order__c odr:orderlist){
+
+            if(odr.Apttus_Config2__Status__c =='Processed' && odr.Callout_Status__c != 'Success' && odr.Is_Add_On_Order__c!= true){
+                orderids.add(odr.id);
+
+            }
+        }
+        system.debug('+++++++++'+orderids);
+        if(orderids.size()>0 && !system.isBatch() && !System.isFuture())
+            ApiCallout(orderids);
+    }
+    @Future(callout=true)
+    public static void ApiCallout(Set<Id> orderids){
+        List<Apttus_Config2__Order__c> orderlist = new list<Apttus_Config2__Order__c>([select id,Apttus_Config2__BillToAccountId__c,Apttus_Config2__BillToAccountId__r.Customer_ID__c
+        from Apttus_Config2__Order__c where id in:orderids]);
+        EndPointURL__c endpoint = EndPointURL__c.getValues('CustomerPushURL');
+
+        for(Apttus_Config2__Order__c odr:orderlist){
+            if(odr.Apttus_Config2__BillToAccountId__r.Customer_ID__c!='' && odr.Apttus_Config2__BillToAccountId__r.Customer_ID__c!=null){
+                Http http = new Http();
+                HttpRequest request = new HttpRequest();
+                request.setEndpoint(endpoint.URL__c+odr.Apttus_Config2__BillToAccountId__r.Customer_ID__c);
+                request.setMethod('POST');
+                //request.setBody('{"prodId":"'+prodId+'"}');
+                system.debug(request);
+                if(!Test.isRunningTest()){
+                    HttpResponse response = http.send(request);
+                    if (response.getStatusCode() == 200) {
+                        odr.Callout_Status__c = 'Success';
+                    }else{
+                        odr.Callout_Status__c = 'Failure';
+                    }
+                }
+            }
+        }
+        update orderlist;
+    }
+    */
+    //created as part of PC-1459
+    public static void notifyW1UKOrderCreation(List<Apttus_Config2__Order__c> OrdersList){
+        List<Messaging.SingleEmailMessage> mailList = new List<Messaging.SingleEmailMessage>();
+        String w1Profiles = System.Label.W1Profiles;   
+        String W1OrderNotificationTemplateName = System.Label.W1OrderNotificationTemplateName;                           
+        try{
+            String ORG_WIDE_EMAIL_ID = [SELECT Id, CreatedById, Address, DisplayName FROM OrgWideEmailAddress WHERE Address =: System.Label.PRM_VAR_Notification_From_Address].Id;
+            Id eTempId = [select id from EmailTemplate where DeveloperName=: W1OrderNotificationTemplateName].id;
+            User u =[select id,name,profileId,Profile.name,contactId,contact.accountId,contact.account.name,contact.account.id,
+                     contact.account.PRM_Channel_Partner_Level__c,contact.account.Type,
+                     contact.account.Regions__c,contact.account.Admin_Deployment_Contact__c,
+                     contact.account.PRM_Operating_Regions__c from User where id =: UserInfo.getUserId() LIMIT 1];
+             
+            if(u.contactId != null && w1Profiles.contains(u.profile.name)){
+                if((u.contact.account.Type == 'Distributor'||u.contact.account.Type == 'Direct VAR' || u.contact.account.Type == 'VAR') && u.contact.account.Regions__c == 'UK'){
+                    for(Apttus_Config2__Order__c order : OrdersList){
+                        Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+                        // Who you are sending the email to
+                        mail.setTargetObjectId(u.contactId);
+                        mail.saveAsActivity = false;
+                        // The email template ID used for the email
+                        mail.setTemplateId(eTempId); 
+                        List<String> toAddressList = new List<String>();
+                        toAddressList.add('PartnerXchangedata-uk@8x8.com');
+                        if(u.contact.account.Admin_Deployment_Contact__c != null){
+                            toAddressList.add(u.contact.account.Admin_Deployment_Contact__c); 
+                        }    
+                        mail.setToAddresses(toAddressList);
+                        mail.setWhatId(order.id);
+                        //mail.setSenderDisplayName('PartnerXchangedata-uk@8x8.com');
+                        mail.setOrgWideEmailAddressId(ORG_WIDE_EMAIL_ID);
+                        mailList.add(mail);
+                    }
+                    if(!mailList.isEmpty() && !Test.isRunningTest()){    
+                        Messaging.sendEmail(mailList);
+                    } 
+                }   
+            }
+        } 
+        Catch(Exception e){
+            System.debug(e.getMessage());
+        }
+        
+    }
+    
+    //created as part of PC-2164
+    public static void notifyW1USOrderCreation(List<Apttus_Config2__Order__c> OrdersList){
+        List<Messaging.SingleEmailMessage> mailList = new List<Messaging.SingleEmailMessage>();
+        String w1Profiles = System.Label.W1Profiles;   
+        String W1OrderNotificationTemplateName = System.Label.W1OrderNotificationTemplateUSA;                           
+        try{
+            String ORG_WIDE_EMAIL_ID = [SELECT Id, CreatedById, Address, DisplayName FROM OrgWideEmailAddress WHERE Address =: System.Label.PRM_VAR_Notification_From_Address].Id;
+            Id eTempId = [select id from EmailTemplate where DeveloperName=: W1OrderNotificationTemplateName].id;
+            User u =[select id,name,profileId,Profile.name,contactId,contact.accountId,contact.account.name,contact.account.id,contact.account.Capture_End_Customer_Price__c,
+                     contact.account.PRM_Channel_Partner_Level__c,contact.account.Type,
+                     contact.account.Regions__c,contact.account.Admin_Deployment_Contact__c,
+                     contact.account.PRM_Operating_Regions__c from User where id =: UserInfo.getUserId() LIMIT 1];
+             
+            if(u.contactId != null && w1Profiles.contains(u.profile.name)){
+                if((/*u.contact.account.Type == 'Distributor'||*/u.contact.account.Type == 'Direct VAR' && u.contact.account.Capture_End_Customer_Price__c == false) && u.contact.account.Regions__c == 'USA'){
+                    for(Apttus_Config2__Order__c order : OrdersList){
+                        System.debug('USA Orders Dist');
+                        Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+                        // Who you are sending the email to(Partner Contact submitting Order)
+                        mail.setTargetObjectId(u.contactId);
+                        mail.saveAsActivity = false;
+                        // The email template ID used for the email
+                        mail.setTemplateId(eTempId); 
+                        List<String> toAddressList = new List<String>();
+                        toAddressList.addAll(System.Label.PRM_PartnerXchangedata_USA.split(','));
+                        if(u.contact.account.Admin_Deployment_Contact__c != null){
+                            toAddressList.add(u.contact.account.Admin_Deployment_Contact__c); 
+                        }    
+                        mail.setToAddresses(toAddressList);
+                        mail.setWhatId(order.id);
+                        //mail.setSenderDisplayName('PartnerXchangedata-uk@8x8.com');
+                        mail.setOrgWideEmailAddressId(ORG_WIDE_EMAIL_ID);
+                        mailList.add(mail);
+                    }
+                    if(!mailList.isEmpty() && !Test.isRunningTest()){    
+                        Messaging.sendEmail(mailList);
+                    } 
+                }   
+            }
+        } 
+        Catch(Exception e){
+            System.debug(e.getMessage());
+        }
+        
+    }
+    
+    public static void createTaskforVCCDR(List<Apttus_Config2__Order__c> OrdersList, Map<Id, Apttus_Config2__Order__c> mapOldOrder){
+        Set<Id> orderIdProcessed = new Set<Id>();
+        Set<String> VCCProductCodesTaskCreation = new Set<String>{'VCCS0229CO'};
+        for(Apttus_Config2__Order__c objOrder : OrdersList){
+            if(objOrder.Apttus_Config2__Status__c == 'Processed' && mapOldOrder.get(objOrder.Id).Apttus_Config2__Status__c != 'Processed'){
+                orderIdProcessed.add(objOrder.Id);
+            }
+        }
+        List<Apttus_Config2__OrderLineItem__c> liOLI = new List<Apttus_Config2__OrderLineItem__c>();
+        if(orderIdProcessed !=null && orderIdProcessed.size() >0){
+            liOLI = [select Id,Name,Apttus_Config2__OrderId__r.ERPOrderNumber__c,Apttus_Config2__OrderId__c,Apttus_Config2__ProductId__r.ProductCode,Apttus_Config2__OrderId__r.Apttus_Config2__OrderDate__c
+                                                        ,Apttus_Config2__OrderId__r.Apttus_Config2__BillToAccountId__r.Name,Apttus_Config2__OrderId__r.Apttus_Config2__PrimaryContactId__r.Name,Apttus_Config2__OrderId__r.Apttus_Config2__PrimaryContactId__r.Email from Apttus_Config2__OrderLineItem__c WHERE  Apttus_Config2__ProductId__r.ProductCode IN :VCCProductCodesTaskCreation AND Apttus_Config2__OrderId__c IN :orderIdProcessed];
+        
+            Map<Id,Boolean> OrderToVCC = new Map<Id,Boolean>();
+            Map<Id,String> OrderToCustomerName= new Map<Id,String>();
+            Map<Id,String> OrderToContactName = new Map<Id,String>();
+            Map<Id,String> OrderToEmail = new Map<Id,String>();
+            if(liOLI !=null && liOLI.size() >0){
+                for(Apttus_Config2__OrderLineItem__c objOLI : liOLI){
+                    if(VCCProductCodesTaskCreation.contains(objOLI.Apttus_Config2__ProductId__r.ProductCode)){
+                        OrderToVCC.put(objOLI.Apttus_Config2__OrderId__c,true);
+                        OrderToCustomerName.put(objOLI.Apttus_Config2__OrderId__c,objOLI.Apttus_Config2__OrderId__r.Apttus_Config2__BillToAccountId__r.Name);
+                        OrderToContactName.put(objOLI.Apttus_Config2__OrderId__c , objOLI.Apttus_Config2__OrderId__r.Apttus_Config2__PrimaryContactId__r.Name);
+                        OrderToEmail.put(objOLI.Apttus_Config2__OrderId__c , objOLI.Apttus_Config2__OrderId__r.Apttus_Config2__PrimaryContactId__r.Email);
+                    }
+                }
+            }
+            String CustomerName = '';
+            String ContactEmail = '';
+            String ContactName = '';
+            for(Apttus_Config2__Order__c objOrder : OrdersList){
+                if(OrderToVCC !=null && OrderToVCC.get(objOrder.Id) !=null && OrderToVCC.get(objOrder.Id)){
+                    if(OrderToCustomerName !=null){
+                        CustomerName = OrderToCustomerName.get(objOrder.Id);
+                    }
+                    if(OrderToContactName !=null){
+                        ContactName = OrderToContactName.get(objOrder.Id);
+                    }
+                    if(OrderToCustomerName !=null){
+                        ContactEmail = OrderToEmail.get(objOrder.Id);
+                    }
+                    CreateTaskForVCCDR(objOrder,CustomerName,ContactName,ContactEmail );
+                }
+            }
+            if(liTasksInsert !=null && liTasksInsert.size() >0){
+                insert liTasksInsert;
+            }
+        }
+    }
+    
+    public static void CreateTaskForVCCDR(Apttus_Config2__Order__c objOrder,String CustomerName,String ContactName,String ContactEmail){
+        Task objTask = new Task();
+        objTask.OwnerId = System.Label.Star_Peko;
+        objTask.Subject = 'Disaster Recovery Tenant';
+        objTask.Status = 'Open';
+        objTask.Priority = 'Normal';
+        objTask.WhatId = objOrder.Id;
+        String taskbody = 'Disaster Recovery tenant\n';
+        taskbody += 'Order Id:'+objOrder.ERPOrderNumber__c+'\n' ;
+        taskbody += 'Order Date:'+objOrder.Apttus_Config2__OrderDate__c+'\n\n' ;
+        taskbody += 'Company:'+CustomerName+'\n'  ;
+        taskbody += 'Contact Name:'+ContactName+ '\n';
+        taskbody += 'Contact Email Address:'+ContactEmail;
+                
+        objTask.VCC_DR_Task__c = true;
+        
+        objTask.description = taskbody;
+        liTasksInsert.add(objTask);
+    }
+    
+    //BST-4896
+    @future
+    public static void sendEmailForSpecialTerms(Set<ID> ordIDList) {
+        List<QTC_Settings__c> qtcList = QTC_Settings__c.getall().values();
+        List<String> emails = new List<String>{'default@8x8.com'};
+        if(qtcList.size() > 0) {
+          QTC_Settings__c qtc = qtcList[0];
+          String emailStr =  qtc.Emails_For_Special_Terms__c;
+          if(emailStr != null) {
+            emails = emailStr.split(',');
+          }
+        }
+        Boolean sendEmail = false;
+        List<Apttus_Config2__Order__c> ordSOList = [select id, Name, Apttus_Config2__SoldToAccountId__r.Name,
+                                Apttus_Config2__SoldToAccountId__r.Account_Billing_ID__c, 
+                                Owner.Name, 
+                                (select id, Apttus_Config2__AttributeValueId__r.Special_Terms__c,
+                                  Apttus_Config2__ProductId__r.Name
+                                  from Apttus_COnfig2__OrderLineItems__r 
+                                  where Apttus_COnfig2__LineType__c = 'Product/Service')
+                                from apttus_Config2__Order__c
+                                where ID IN :ordIDList];  
+        for(Apttus_Config2__Order__c ordSO : ordSOList) {
+          Messaging.SingleEmailMessage message = new Messaging.SingleEmailMessage();
+          message.toAddresses = emails;
+          message.subject = 'Important! Special Terms included for Order: ' + ordSO.Name;
+          String termStr = '';
+          termStr += 'Order ID: ' + ordSO.Name + '\n';
+          termStr += 'Account Name: ' + ordSO.Apttus_Config2__SoldToAccountId__r.Name + '\n';
+          termStr += 'Account Billing ID: ' + ordSO.Apttus_Config2__SoldToAccountId__r.Account_Billing_ID__c + '\n';
+          termStr += 'Sales Owner: ' + ordSO.Owner.Name + '\n';
+          termStr += '\n';
+          for(Apttus_Config2__OrderLineItem__c oliSO : ordSO.Apttus_COnfig2__OrderLineItems__r) {
+            if(oliSO.Apttus_Config2__AttributeValueId__r.Special_Terms__c != null) {
+              termStr += oliSO.Apttus_Config2__ProductId__r.Name + ':' + '\n';
+              termStr += '  ' + oliSO.Apttus_Config2__AttributeValueId__r.Special_Terms__c  + '\n';
+              termStr += '\n';
+              sendEmail = true;
+            }
+          }
+          message.plainTextBody = termStr;
+          if(sendEmail) {
+            Messaging.SingleEmailMessage[] messages =   new List<Messaging.SingleEmailMessage> {message};
+            Messaging.SendEmailResult[] results = Messaging.sendEmail(messages);
+          }
+          
+        }
+    }
+
+    //BST-4828
+    public static boolean sendEmailToGNPTeam(Map<string, List<Apttus_Config2__OrderLineItem__c>> OrderIdToOLIs) {
+        Set<String> vcc_SKU_Products = new Set<String>(Label.VCC_SKUs_for_GNP_team.split(','));
+        List<String> toAddresses = new List<String> {label.GNP_Team_Email}; 
+        List<String> ccAddresses = new List<String> {''};            
+        List<Messaging.SingleEmailMessage> emails = new List<Messaging.SingleEmailMessage>();
+        Map<string, string> orderIdToURL = new Map<string, string>();
+        Apttus_Config2__Order__c order;
+        boolean return_value = false;
+
+        for (string orderId : OrderIdToOLIs.keySet()) {
+            
+            Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+            mail.setToAddresses(toAddresses);
+            //mail.setCcAddresses(ccAddresses);
+            mail.setSubject('Tenant provisioning task for Order ID: ' + orderId);
+            String skusText = '';
+ 
+            for (Apttus_Config2__OrderLineItem__c orderLineItem : OrderIdToOLIs.get(orderId)) {
+                skusText += orderLineItem.Apttus_Config2__ProductId__r.ProductCode + ' ' + orderLineItem.Apttus_Config2__ProductId__r.Name + '\n';
+                if(!orderIdToURL.containsKey(orderId)){
+                    orderIdToURL.put(orderId, orderLineItem.Apttus_Config2__OrderId__r.Apttus_QPConfig__ProposalId__r.Public_URL__c);
+                    order = (Apttus_Config2__Order__c) orderLineItem.getSobject('Apttus_Config2__OrderId__r');
+                }
+            }
+ 
+            String bodyText = 'Order ID: ' + orderId + '\nCustomer Name: ' + order.Apttus_Config2__BillToAccountId__r.Name 
+                              + '\n\nOrder URL: ' + orderIdToURL.get(orderId) + '\nSKUs: \n' + skusText +
+                              + '\n\nQTC has received an order but certain SKUs in this cannot be auto-provisioned. Please check.';
+            
+            mail.setPlainTextBody(bodyText);
+            emails.add(mail);
+        }
+        
+        if(!emails.isEmpty()){
+            Messaging.sendEmail(emails);
+            return_value = true;
+        }
+        return return_value;
+    }
+    //BIZ-1386
+      @future
+      public static void createAPILogs(Map<ID, ID> ordIDAccIDMap) {
+        List<API_Log__c> alSOList = new List<API_Log__c>();
+        //Hardcoding Billing Account name for 1.0 release. 1.1 we will have a different logic
+        List<Billing_Account__c> billAccSOList = [select id from Billing_Account__c where Billing_Account_Name__c = 'ScanSource USA'];
+                
+        for(ID ordID : ordIDAccIDMap.keySet()) {
+          alSOList.add(createAPILog(ordID, null, null, 'Create', 'Product Add'));
+          if(billAccSOList != null && billAccSOList.size() > 0) {
+            alSOList.add(createAPILog(null, ordIDAccIDMap.get(ordID), billAccSOList[0].ID, 'Create', null));
+          }
+        }
+        if(alSOList != null && alSOList.size() > 0) {
+          insert alSOList;
+        }
+      }
+      public static API_Log__c createAPILog (ID ordID, ID accID, ID billAccID, String eventType, String logType) {
+        API_Log__c alSO = new API_Log__c();
+        alSO.Order__c = ordID;
+        alSO.Event_Type__c = eventType;
+        alSO.Log_Type__c = logType;
+        alSO.Status__c = 'Pending';
+        alSO.Account__c = accID;
+        alSO.Billing_Account__c = billAccID;
+        return alSO;
+      }
+
+}

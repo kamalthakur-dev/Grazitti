@@ -1,0 +1,311 @@
+USER_DEBUG|[185]|DEBUG|FINAAAAAL-
+
+[
+  {
+    "shippingMethod": {
+      "value": null,
+      "price": null,
+      "method": null,
+      "label": null,
+      "id": null
+    },
+    "SectionTaxPrice": null,
+    "SectionNetPrice": null,
+    "SectionListPrice": "60.00",
+    "SectionListEndCustomerPrice": null,
+    "products": [
+      {
+        "TotalSeatCount": null,
+        "totalPrice": "45.00",
+        "tax": 0,
+        "subCategory": null,
+        "SeatCount": [
+          {
+            "price": "45.00000",
+            "MinValue": "1",
+            "MaxValue": "99",
+            "masterPMPrice": null
+          },
+          {
+            "price": "43.00000",
+            "MinValue": "99",
+            "MaxValue": "999",
+            "masterPMPrice": null
+          },
+          {
+            "price": "41.00000",
+            "MinValue": "999",
+            "MaxValue": "9999999999",
+            "masterPMPrice": null
+          }
+        ],
+        "quantity": 1,
+        "productRanking": null,
+        "productName": "X Series - X4",
+        "productId": "01t50000004qL6ZAAU",
+        "productCode": "VOSVC0216-04GB",
+        "priceMtrix": null,
+        "priceMethod": null,
+        "priceListItemId": "a6Y2h00000004FuEAI",
+        "price_Type": null,
+        "price": "45.00000",
+        "parentLineNumber": null,
+        "NetPrice": "45.00000",
+        "minimumPrice": null,
+        "masterPriceListPrice": null,
+        "master_Product": {
+          "subCategory": null,
+          "SeatCount": [
+            {
+              "price": "45.00000",
+              "MinValue": "1",
+              "MaxValue": "99",
+              "adjustmentType": "List Price Override"
+            },
+            {
+              "price": "43.00000",
+              "MinValue": "99",
+              "MaxValue": "999",
+              "adjustmentType": "List Price Override"
+            },
+            {
+              "price": "41.00000",
+              "MinValue": "999",
+              "MaxValue": "9999999999",
+              "adjustmentType": "List Price Override"
+            }
+          ],
+          "ProductWeight": null,
+          "productRanking": 200,
+          "productName": "X Series - X4",
+          "productId": "01t50000004qL6YAAU",
+          "productCode": "VOSVC0216-04",
+          "priceMethod": "Per Unit",
+          "priceListItemId": "a6Y2h00000004FuEAI",
+          "price_Type": "Recurring",
+          "price": "45.00000",
+          "minimumPrice": "45.00000",
+          "master_Product": null,
+          "isTierPricing": true,
+          "IsQuantityReadOnly": false,
+          "isHardware": false,
+          "IsFlex": false,
+          "isEppApplied": false,
+          "IsContractPrice": false,
+          "is123PlanExempt": false,
+          "imageUrl": "00P2h000000Mr92EAC",
+          "frequency": "Monthly",
+          "family": "X Series",
+          "ExcludeFromCumulativeQty": false,
+          "ExcludeFromCartQty": false,
+          "EppPriceComparison": "45.00000",
+          "eppMonths": "",
+          "Description": "X Series - X4.  Includes unlimited calling to 47 countries, 1 DID, HD Audio, Secure Voice, Voicemail, Workgroups (Auto Attendant, Hunt Groups, Call Queues), Desktop & Mobile apps with IM & SMS (where available), Advanced Call Forwarding, Analytics Essentials, Internet Fax (may require the purchase of an additional DID), Single Sign-on capable, out of the box integrations to Salesforce, Zendesk, and NetSuite, and VO Meetings with support for up to 50 participants, Operator Switchboard and Salesforce Employee Analytics, Salesforce Team Analytics and Call Quality Reporting.",
+          "chargeType": "Standard Price",
+          "category": "X series",
+          "billingFrequency": null,
+          "AddOnPricingTier": null,
+          "ActualPrice": "45.00000"
+        },
+        "lineSequenceNumber": null,
+        "isTierPricing": true,
+        "IsQuantityReadOnly": null,
+        "IsHardwareFlag": "false",
+        "isHardware": false,
+        "IsFlex": false,
+        "isEppApplied": false,
+        "IsContractPrice": null,
+        "isAddOn": null,
+        "is123PlanExempt": null,
+        "imageUrl": "00P2h000000NzuqEAC",
+        "frequency": null,
+        "family": "X Series",
+        "eppMonths": null,
+        "endCustomerPrice": null,
+        "display": null,
+        "chargeType": null,
+        "category": "X series",
+        "billingFrequency": null,
+        "autoInclude": null,
+        "applicablePricePercentageChange": null,
+        "applicablePrice": "45.00",
+        "ActualPrice": "45.00"
+      },
+      {
+        "TotalSeatCount": null,
+        "totalPrice": "15.00",
+        "tax": 0,
+        "subCategory": null,
+        "SeatCount": [
+          {
+            "price": "15.00000",
+            "MinValue": "1",
+            "MaxValue": "99",
+            "masterPMPrice": null
+          },
+          {
+            "price": "13.00000",
+            "MinValue": "99",
+            "MaxValue": "999",
+            "masterPMPrice": null
+          },
+          {
+            "price": "11.00000",
+            "MinValue": "999",
+            "MaxValue": "9999999999",
+            "masterPMPrice": null
+          }
+        ],
+        "quantity": 1,
+        "productRanking": null,
+        "productName": "X Series - X1",
+        "productId": "01t50000004qL6TAAU",
+        "productCode": "VOSVC0216-01GB",
+        "priceMtrix": null,
+        "priceMethod": null,
+        "priceListItemId": "a6Y2h00000004FfEAI",
+        "price_Type": null,
+        "price": "15.00000",
+        "parentLineNumber": null,
+        "NetPrice": "15.00000",
+        "minimumPrice": null,
+        "masterPriceListPrice": null,
+        "master_Product": {
+          "subCategory": null,
+          "SeatCount": [
+            {
+              "price": "15.00000",
+              "MinValue": "1",
+              "MaxValue": "99",
+              "adjustmentType": "List Price Override"
+            },
+            {
+              "price": "13.00000",
+              "MinValue": "99",
+              "MaxValue": "999",
+              "adjustmentType": "List Price Override"
+            },
+            {
+              "price": "11.00000",
+              "MinValue": "999",
+              "MaxValue": "9999999999",
+              "adjustmentType": "List Price Override"
+            }
+          ],
+          "ProductWeight": null,
+          "productRanking": 200,
+          "productName": "X Series - X1",
+          "productId": "01t50000004qL6SAAU",
+          "productCode": "VOSVC0216-01",
+          "priceMethod": "Per Unit",
+          "priceListItemId": "a6Y2h00000004FfEAI",
+          "price_Type": "Recurring",
+          "price": "15.00000",
+          "minimumPrice": "15.00000",
+          "master_Product": null,
+          "isTierPricing": true,
+          "IsQuantityReadOnly": false,
+          "isHardware": false,
+          "IsFlex": false,
+          "isEppApplied": false,
+          "IsContractPrice": false,
+          "is123PlanExempt": false,
+          "imageUrl": "00P2h000000Mr8nEAC",
+          "frequency": "Monthly",
+          "family": "X Series",
+          "ExcludeFromCumulativeQty": false,
+          "ExcludeFromCartQty": false,
+          "EppPriceComparison": "15.00000",
+          "eppMonths": "",
+          "Description": "X Series - X1.  Includes unlimited calling to the US and Canada, 1 DID, HD Audio, Secure Voice, Voicemail, Workgroups (Auto Attendant, Hunt Groups), Desktop & Mobile apps with IM, Advanced Call Forwarding, Analytics Essentials, Single Sign-on capable.",
+          "chargeType": "Standard Price",
+          "category": "X series",
+          "billingFrequency": null,
+          "AddOnPricingTier": null,
+          "ActualPrice": "15.00000"
+        },
+        "lineSequenceNumber": null,
+        "isTierPricing": true,
+        "IsQuantityReadOnly": null,
+        "IsHardwareFlag": "false",
+        "isHardware": false,
+        "IsFlex": false,
+        "isEppApplied": false,
+        "IsContractPrice": null,
+        "isAddOn": null,
+        "is123PlanExempt": null,
+        "imageUrl": "00P2h000000NyvhEAC",
+        "frequency": null,
+        "family": "X Series",
+        "eppMonths": null,
+        "endCustomerPrice": null,
+        "display": null,
+        "chargeType": null,
+        "category": "X series",
+        "billingFrequency": null,
+        "autoInclude": null,
+        "applicablePricePercentageChange": null,
+        "applicablePrice": "15.00",
+        "ActualPrice": "15.00"
+      }
+    ],
+    "location": {
+      "zip": "95131",
+      "state": "CA",
+      "name": "2125 ONEL Dr,San Jose,CA,USA,95131",
+      "locationId": "a4Q2h0000004eSY",
+      "country": "USA",
+      "city": "San Jose"
+    },
+    "is123Plan": false,
+    "freeperiod": null,
+    "freeMonthDate": null,
+    "contractterm": "12",
+    "contractEndDate": null,
+    "applicablePrice": null
+  }
+]
+
+
+
+
+USER_DEBUG|[52]|DEBUG|>>>>(primaryClass:[SectionListEndCustomerPrice=null, SectionListPrice=60.00, SectionNetPrice=null, SectionTaxPrice=null, applicablePrice=null, contractEndDate=null, contractterm=12, freeMonthDate=null, freeperiod=null, is123Plan=false, location=location:[city=San Jose, country=USA, locationId=a4Q2h0000004eSY, name=2125 ONEL Dr,San Jose,CA,USA,95131, state=CA, zip=95131], products=(product:[ActualPrice=45.00, IsContractPrice=null, IsFlex=false, IsHardwareFlag=false, IsQuantityReadOnly=null, NetPrice=45.00000, SeatCount=(SeatCount:[MaxValue=99, MinValue=1, masterPMPrice=null, price=45.00000], SeatCount:[MaxValue=999, MinValue=99, masterPMPrice=null, price=43.00000], SeatCount:[MaxValue=9999999999, MinValue=999, masterPMPrice=null, price=41.00000]), TotalSeatCount=null, applicablePrice=45.00, applicablePricePercentageChange=null, autoInclude=null, billingFrequency=null, category=X series, chargeType=null, display=null, endCustomerPrice=null, eppMonths=null, family=X Series, frequency=null, imageUrl=00P2h000000NzuqEAC, is123PlanExempt=null, isAddOn=null, isEppApplied=false, isHardware=false, isTierPricing=true, lineSequenceNumber=null, masterPriceListPrice=null, master_Product=catalogwrapper:[ActualPrice=45.00000, AddOnPricingTier=null, Description=X Series - X4.  Includes unlimited calling to 47 countries, 1 DID, HD Audio, Secure Voice, Voicemail, Workgroups (Auto Attendant, Hunt Groups, Call Queues), Desktop & Mobile apps with IM & SMS (where available), Advanced Call Forwarding, Analytics Essentials, Internet Fax (may require the purchase of an additional DID), Single Sign-on capable, out of the box integrations to Salesforce, Zendesk, and NetSuite, and VO Meetings with support for up to 50 participants, Operator Switchboard and Salesforce Employee Analytics, Salesforce Team Analytics and Call Quality Reporting., EppPriceComparison=45.00000, ExcludeFromCartQty=false, ExcludeFromCumulativeQty=false, IsContractPrice=false, IsFlex=false, IsQuantityReadOnly=false, ProductWeight=null, SeatCount=(TierPricingwrapper:[MaxValue=99, MinValue=1, adjustmentType=List Price Override, price=45.00000], TierPricingwrapper:[MaxValue=999, MinValue=99, adjustmentType=List Price Override, price=43.00000], TierPricingwrapper:[MaxValue=9999999999, MinValue=999, adjustmentType=List Price Override, price=41.00000]), billingFrequency=null, category=X series, chargeType=Standard Price, eppMonths=, family=X Series, frequency=Monthly, imageUrl=00P2h000000Mr92EAC, is123PlanExempt=false, isEppApplied=false, isHardware=false, isTierPricing=true, master_Product=null, minimumPrice=45.00000, price=45.00000, priceListItemId=a6Y2h00000004FuEAI, priceMethod=Per Unit, price_Type=Recurring, productCode=VOSVC0216-04, productId=01t50000004qL6YAAU, productName=X Series - X4, productRanking=200.0, subCategory=null], minimumPrice=null, parentLineNumber=null, price=45.00000, priceListItemId=a6Y2h00000004FuEAI, priceMethod=null, priceMtrix=null, price_Type=null, productCode=VOSVC0216-04GB, productId=01t50000004qL6ZAAU, productName=X Series - X4, productRanking=null, quantity=1, subCategory=null, tax=0, totalPrice=45.00], product:[ActualPrice=15.00, IsContractPrice=null, IsFlex=false, IsHardwareFlag=false, IsQuantityReadOnly=null, NetPrice=15.00000, SeatCount=(SeatCount:[MaxValue=99, MinValue=1, masterPMPrice=null, price=15.00000], SeatCount:[MaxValue=999, MinValue=99, masterPMPrice=null, price=13.00000], SeatCount:[MaxValue=9999999999, MinValue=999, masterPMPrice=null, price=11.00000]), TotalSeatCount=null, applicablePrice=15.00, applicablePricePercentageChange=null, autoInclude=null, billingFrequency=null, category=X series, chargeType=null, display=null, endCustomerPrice=null, eppMonths=null, family=X Series, frequency=null, imageUrl=00P2h000000NyvhEAC, is123PlanExempt=null, isAddOn=null, isEppApplied=false, isHardware=false, isTierPricing=true, lineSequenceNumber=null, masterPriceListPrice=null, master_Product=catalogwrapper:[ActualPrice=15.00000, AddOnPricingTier=null, Description=X Series - X1.  Includes unlimited calling to the US and Canada, 1 DID, HD Audio, Secure Voice, Voicemail, Workgroups (Auto Attendant, Hunt Groups), Desktop & Mobile apps with IM, Advanced Call Forwarding, Analytics Essentials, Single Sign-on capable., EppPriceComparison=15.00000, ExcludeFromCartQty=false, ExcludeFromCumulativeQty=false, IsContractPrice=false, IsFlex=false, IsQuantityReadOnly=false, ProductWeight=null, SeatCount=(TierPricingwrapper:[MaxValue=99, MinValue=1, adjustmentType=List Price Override, price=15.00000], TierPricingwrapper:[MaxValue=999, MinValue=99, adjustmentType=List Price Override, price=13.00000], TierPricingwrapper:[MaxValue=9999999999, MinValue=999, adjustmentType=List Price Override, price=11.00000]), billingFrequency=null, category=X series, chargeType=Standard Price, eppMonths=, family=X Series, frequency=Monthly, imageUrl=00P2h000000Mr8nEAC, is123PlanExempt=false, isEppApplied=false, isHardware=false, isTierPricing=true, master_Product=null, minimumPrice=15.00000, price=15.00000, priceListItemId=a6Y2h00000004FfEAI, priceMethod=Per Unit, price_Type=Recurring, productCode=VOSVC0216-01, productId=01t50000004qL6SAAU, productName=X Series - X1, productRanking=200.0, subCategory=null], minimumPrice=null, parentLineNumber=null, price=15.00000, priceListItemId=a6Y2h00000004FfEAI, priceMethod=null, priceMtrix=null, price_Type=null, productCode=VOSVC0216-01GB, productId=01t50000004qL6TAAU, productName=X Series - X1, productRanking=null, quantity=1, subCategory=null, tax=0, totalPrice=15.00]), shippingMethod=shippingMethod:[id=null, label=null, method=null, price=null, value=null]])
+
+
+
+
+
+
+23:41:52.42 (2211202732)|USER_DEBUG|[73]|DEBUG|>>>>product:[ActualPrice=45.00, IsContractPrice=null, IsFlex=false, IsHardwareFlag=false, IsQuantityReadOnly=null, NetPrice=45.00000, SeatCount=(SeatCount:[MaxValue=99, MinValue=1, masterPMPrice=null, price=45.00000], SeatCount:[MaxValue=999, MinValue=99, masterPMPrice=null, price=43.00000], SeatCount:[MaxValue=9999999999, MinValue=999, masterPMPrice=null, price=41.00000]), TotalSeatCount=null, applicablePrice=45.00, applicablePricePercentageChange=null, autoInclude=null, billingFrequency=null, category=X series, chargeType=null, display=null, endCustomerPrice=null, eppMonths=null, family=X Series, frequency=null, imageUrl=00P2h000000NzuqEAC, is123PlanExempt=null, isAddOn=null, isEppApplied=false, isHardware=false, isTierPricing=true, lineSequenceNumber=null, masterPriceListPrice=null, master_Product=catalogwrapper:[ActualPrice=45.00000, AddOnPricingTier=null, Description=X Series - X4.  Includes unlimited calling to 47 countries, 1 DID, HD Audio, Secure Voice, Voicemail, Workgroups (Auto Attendant, Hunt Groups, Call Queues), Desktop & Mobile apps with IM & SMS (where available), Advanced Call Forwarding, Analytics Essentials, Internet Fax (may require the purchase of an additional DID), Single Sign-on capable, out of the box integrations to Salesforce, Zendesk, and NetSuite, and VO Meetings with support for up to 50 participants, Operator Switchboard and Salesforce Employee Analytics, Salesforce Team Analytics and Call Quality Reporting., EppPriceComparison=45.00000, ExcludeFromCartQty=false, ExcludeFromCumulativeQty=false, IsContractPrice=false, IsFlex=false, IsQuantityReadOnly=false, ProductWeight=null, SeatCount=(TierPricingwrapper:[MaxValue=99, MinValue=1, adjustmentType=List Price Override, price=45.00000], TierPricingwrapper:[MaxValue=999, MinValue=99, adjustmentType=List Price Override, price=43.00000], TierPricingwrapper:[MaxValue=9999999999, MinValue=999, adjustmentType=List Price Override, price=41.00000]), billingFrequency=null, category=X series, chargeType=Standard Price, eppMonths=, family=X Series, frequency=Monthly, imageUrl=00P2h000000Mr92EAC, is123PlanExempt=false, isEppApplied=false, isHardware=false, isTierPricing=true, master_Product=null, minimumPrice=45.00000, price=45.00000, priceListItemId=a6Y2h00000004FuEAI, priceMethod=Per Unit, price_Type=Recurring, productCode=VOSVC0216-04, productId=01t50000004qL6YAAU, productName=X Series - X4, productRanking=200.0, subCategory=null], minimumPrice=null, parentLineNumber=null, price=45.00000, priceListItemId=a6Y2h00000004FuEAI, priceMethod=null, priceMtrix=null, price_Type=null, productCode=VOSVC0216-04GB, productId=01t50000004qL6ZAAU, productName=X Series - X4, productRanking=null, quantity=1, subCategory=null, tax=0, totalPrice=45.00]
+
+23:41:52.42 (2215243396)|USER_DEBUG|[73]|DEBUG|>>>>product:[ActualPrice=15.00, IsContractPrice=null, IsFlex=false, IsHardwareFlag=false, IsQuantityReadOnly=null, NetPrice=15.00000, SeatCount=(SeatCount:[MaxValue=99, MinValue=1, masterPMPrice=null, price=15.00000], SeatCount:[MaxValue=999, MinValue=99, masterPMPrice=null, price=13.00000], SeatCount:[MaxValue=9999999999, MinValue=999, masterPMPrice=null, price=11.00000]), TotalSeatCount=null, applicablePrice=15.00, applicablePricePercentageChange=null, autoInclude=null, billingFrequency=null, category=X series, chargeType=null, display=null, endCustomerPrice=null, eppMonths=null, family=X Series, frequency=null, imageUrl=00P2h000000NyvhEAC, is123PlanExempt=null, isAddOn=null, isEppApplied=false, isHardware=false, isTierPricing=true, lineSequenceNumber=null, masterPriceListPrice=null, master_Product=catalogwrapper:[ActualPrice=15.00000, AddOnPricingTier=null, Description=X Series - X1.  Includes unlimited calling to the US and Canada, 1 DID, HD Audio, Secure Voice, Voicemail, Workgroups (Auto Attendant, Hunt Groups), Desktop & Mobile apps with IM, Advanced Call Forwarding, Analytics Essentials, Single Sign-on capable., EppPriceComparison=15.00000, ExcludeFromCartQty=false, ExcludeFromCumulativeQty=false, IsContractPrice=false, IsFlex=false, IsQuantityReadOnly=false, ProductWeight=null, SeatCount=(TierPricingwrapper:[MaxValue=99, MinValue=1, adjustmentType=List Price Override, price=15.00000], TierPricingwrapper:[MaxValue=999, MinValue=99, adjustmentType=List Price Override, price=13.00000], TierPricingwrapper:[MaxValue=9999999999, MinValue=999, adjustmentType=List Price Override, price=11.00000]), billingFrequency=null, category=X series, chargeType=Standard Price, eppMonths=, family=X Series, frequency=Monthly, imageUrl=00P2h000000Mr8nEAC, is123PlanExempt=false, isEppApplied=false, isHardware=false, isTierPricing=true, master_Product=null, minimumPrice=15.00000, price=15.00000, priceListItemId=a6Y2h00000004FfEAI, priceMethod=Per Unit, price_Type=Recurring, productCode=VOSVC0216-01, productId=01t50000004qL6SAAU, productName=X Series - X1, productRanking=200.0, subCategory=null], minimumPrice=null, parentLineNumber=null, price=15.00000, priceListItemId=a6Y2h00000004FfEAI, priceMethod=null, priceMtrix=null, price_Type=null, productCode=VOSVC0216-01GB, productId=01t50000004qL6TAAU, productName=X Series - X1, productRanking=null, quantity=1, subCategory=null, tax=0, totalPrice=15.00]
+23:41:52.42 
+
+(2216648105)|USER_DEBUG|[163]|DEBUG|OLIListtoInsert-[{"attributes":{"type":"Apttus_Config2__OrderLineItem__c"},"Apttus_Config2__Quantity__c":1,"Apttus_Config2__ProductId__c":"01t50000004qL6ZAAU","Added_By_Primary_Number__c":null,"Is_EPP__c":false,"EPP_Term__c":null,"APTS_CumilativeQuantity__c":null,"Apttus_Config2__PriceListItemId__c":"a6Y2h00000004FuEAI","End_Customer_Price__c":null,"PX_Shipping_Speed__c":"","Apttus_Config2__BasePrice__c":45.0,"Apttus_Config2__ListPrice__c":45.0,"Apttus_Config2__NetUnitPrice__c":45.0,"Apttus_Config2__NetPrice__c":45.0,"First_Month_Net_Unit_Price__c":45.0,"First_Month_Net_Price__c":45.0,"Apttus_Config2__LocationId__c":"a4Q2h0000004eSYEAY","Apttus_Config2__SellingTerm__c":1,"Apttus_Config2__PriceType__c":null,"Apttus_Config2__ChargeType__c":null,"Apttus_Config2__PriceMethod__c":null,"Apttus_Config2__Frequency__c":null,"Apttus_Config2__BillingFrequency__c":null},{"attributes":{"type":"Apttus_Config2__OrderLineItem__c"},"Apttus_Config2__Quantity__c":1,"Apttus_Config2__ProductId__c":"01t50000004qL6TAAU","Added_By_Primary_Number__c":null,"Is_EPP__c":false,"EPP_Term__c":null,"APTS_CumilativeQuantity__c":null,"Apttus_Config2__PriceListItemId__c":"a6Y2h00000004FfEAI","End_Customer_Price__c":null,"PX_Shipping_Speed__c":"","Apttus_Config2__BasePrice__c":15.0,"Apttus_Config2__ListPrice__c":15.0,"Apttus_Config2__NetUnitPrice__c":15.0,"Apttus_Config2__NetPrice__c":15.0,"First_Month_Net_Unit_Price__c":15.0,"First_Month_Net_Price__c":15.0,"Apttus_Config2__LocationId__c":"a4Q2h0000004eSYEAY","Apttus_Config2__SellingTerm__c":1,"Apttus_Config2__PriceType__c":null,"Apttus_Config2__ChargeType__c":null,"Apttus_Config2__PriceMethod__c":null,"Apttus_Config2__Frequency__c":null,"Apttus_Config2__BillingFrequency__c":null}]
+
+
+
+
+23:41:59.492 (10382257563)|USER_DEBUG|[264]|DEBUG|ID ---------- null
+23:41:59.492 (10382315686)|USER_DEBUG|[265]|DEBUG|DID Country ---------- USA
+23:41:59.492 (10382475836)|USER_DEBUG|[264]|DEBUG|ID ---------- a6l2h000000156SAAQ
+23:41:59.492 (10382491123)|USER_DEBUG|[265]|DEBUG|DID Country ---------- null
+23:41:59.492 (10382734417)|USER_DEBUG|[264]|DEBUG|ID ---------- null
+23:41:59.492 (10382750403)|USER_DEBUG|[265]|DEBUG|DID Country ---------- USA
+23:41:59.492 (10382811413)|USER_DEBUG|[264]|DEBUG|ID ---------- a6l2h000000156TAAQ
+23:41:59.492 (10382831609)|USER_DEBUG|[265]|DEBUG|DID Country ---------- null
+23:41:59.492 (10383002823)|USER_DEBUG|[264]|DEBUG|ID ---------- null
+23:41:59.492 (10383022365)|USER_DEBUG|[265]|DEBUG|DID Country ---------- USA
+23:41:59.492 (10383084339)|USER_DEBUG|[264]|DEBUG|ID ---------- null
+23:41:59.492 (10383096128)|USER_DEBUG|[265]|DEBUG|DID Country ---------- USA
+
+
+23:41:59.492 (10484191421)|USER_DEBUG|[305]|DEBUG|USA----------------a6l2h000000156SAAQ
+23:41:59.492 (10484410753)|USER_DEBUG|[312]|DEBUG|prodAttribute2---------Apttus_Config2__ProductAttributeValue__c:{Id=a6l2h000000156SAAQ, DID_Country__c=USA, Toll_Free_DID_Country__c=USA}
+23:41:59.492 (10484625233)|USER_DEBUG|[305]|DEBUG|USA----------------a6l2h000000156TAAQ
+23:41:59.492 (10484747088)|USER_DEBUG|[312]|DEBUG|prodAttribute2---------Apttus_Config2__ProductAttributeValue__c:{Id=a6l2h000000156TAAQ, DID_Country__c=USA, Toll_Free_DID_Country__c=USA}
+
+
+
+USER_DEBUG|[914]|DEBUG|????(Apttus_Config2__ProductConfiguration__c:{Id=a6o2h0000001pilAAA})
+
